@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy this file to dart_defines.json and paste your key. Get a FREE Gemini key at https://aistudio.google.com/apikey . The Run config 'kBuzz (AI keys)' passes this file via --dart-define-from-file.",
+  "GEMINI_API_KEY": "",
+  "GEMINI_MODEL": "gemini-2.0-flash"
+}

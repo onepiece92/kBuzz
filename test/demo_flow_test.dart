@@ -1,0 +1,48 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kbuzz/app/app.dart';
+import 'package:kbuzz/app/di.dart';
+
+void main() {
+  testWidgets('generate demo data, then it shows on the boards',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const AppProviders(child: KBuzzApp()));
+    await tester.pumpAndSettle();
+
+    // Boards start empty until data is generated.
+    expect(find.textContaining('No tickets yet'), findsOneWidget);
+
+    // Go to Profile and generate the demo data. The button lives below several
+    // settings cards now, so scroll it into the lazily-built list first.
+    await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Generate demo data'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Generate demo data'));
+    await tester.pump(); // emit state + insert toast
+    // No AI key in tests → a randomized rush, so assert on the generic
+    // 'Table N' label rather than a specific number.
+    expect(find.text('Tickets'), findsWidgets);
+    expect(find.textContaining('Table '), findsWidgets);
+
+    // Let the top toast auto-dismiss so no timer outlives the test.
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+
+    // The Tickets board now renders the generated tickets — each card shows a
+    // 'plate … · target …' line (tickets are labelled by code, e.g. T5/D21).
+    await tester.tap(find.byIcon(Icons.receipt_long_outlined));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('target '), findsWidgets);
+    expect(find.textContaining('plate '), findsWidgets);
+
+    // The Stations board left its empty state — the rush reached the boards.
+    await tester.tap(find.byIcon(Icons.view_week_outlined));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No tickets yet'), findsNothing);
+    expect(find.widgetWithText(AppBar, 'Stations'), findsOneWidget);
+  });
+}

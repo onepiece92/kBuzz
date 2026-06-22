@@ -1,0 +1,32 @@
+# Code-only graphify build: exclude docs/images so extraction runs offline (no LLM/API cost).
+# Delete this file (or remove lines) to include docs & images in a future build.
+
+# Docs (markdown / yaml / text)
+# AGENTS.md is intentionally INCLUDED in the graph (un-ignored). All other
+# markdown is still excluded to keep doc-extraction cost minimal.
+README.md
+*.mdx
+*.yaml
+*.yml
+*.txt
+*.rst
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.ico
+
+# Generated code — produced by build_runner, not authored (repo §0.4).
+# Indexing it bloats the graph and fragments clustering into singletons; keep it out.
+*.g.dart
+*.freezed.dart
+
+# Platform asset/boilerplate dirs (icons, launch images, generated config)
+android/
+ios/
+macos/
+.dart_tool/
+.idea/

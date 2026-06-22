@@ -1,0 +1,226 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kbuzz/core/widgets/app_toast.dart';
+
+void main() {
+  // A minimal host that exposes a context below MaterialApp's root overlay,
+  // which is where AppToast inserts.
+  Future<BuildContext> pumpHost(WidgetTester tester) async {
+    late BuildContext ctx;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (BuildContext context) {
+            ctx = context;
+            return const Scaffold(body: SizedBox.expand());
+          },
+        ),
+      ),
+    );
+    return ctx;
+  }
+
+  // Drain the auto-dismiss timer + slide-out so no timer outlives the test.
+  // Tests pass an explicit 1s hold, so 2s clears it (fake time — instant).
+  Future<void> flush(WidgetTester tester) async {
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+  }
+
+  group('AppToast.fire', () {
+    testWidgets('itemises every fire in the batch (no "+N more" collapsing)',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill', qty: 2),
+          FireToastItem(dishName: 'Momo', stationName: 'Steam'),
+          FireToastItem(dishName: 'Fries', stationName: 'Fryer', qty: 3),
+        ],
+        duration: const Duration(seconds: 1),
+      );
+      await tester.pump(); // insert
+      await tester.pump(const Duration(milliseconds: 300)); // slide-in
+
+      // Header carries the batch count.
+      expect(find.text('FIRE NOW · 3'), findsOneWidget);
+      // Every station + dish is rendered.
+      expect(find.text('2× Burger'), findsOneWidget);
+      expect(find.text('Grill'), findsOneWidget);
+      expect(find.text('Momo'), findsOneWidget);
+      expect(find.text('Steam'), findsOneWidget);
+      expect(find.text('3× Fries'), findsOneWidget);
+      expect(find.text('Fryer'), findsOneWidget);
+
+      await flush(tester);
+    });
+
+    testWidgets('a single fire uses the plain header (no count)',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill', qty: 2),
+        ],
+        duration: const Duration(seconds: 1),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('FIRE NOW'), findsOneWidget);
+      expect(find.text('2× Burger'), findsOneWidget);
+
+      await flush(tester);
+    });
+
+    testWidgets('the corner ✕ dismisses the toast immediately',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill'),
+        ],
+        duration: const Duration(seconds: 1),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byIcon(Icons.close), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle(); // slide-out + remove
+
+      expect(find.byIcon(Icons.close), findsNothing);
+      expect(find.text('Burger'), findsNothing);
+
+      // The original auto-dismiss timer is still queued; firing it must be a
+      // harmless no-op now that the toast is gone (re-entry guard / !mounted).
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('dismiss() animates the active toast out (e.g. run paused)',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill'),
+        ],
+        duration: const Duration(seconds: 1),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Burger'), findsOneWidget);
+
+      AppToast.dismiss();
+      await tester.pumpAndSettle(); // slide-out + remove
+      expect(find.text('Burger'), findsNothing);
+
+      // The original auto-dismiss timer is now a harmless no-op.
+      await tester.pump(const Duration(seconds: 2));
+    });
+
+    testWidgets('dismiss() is a no-op when nothing is showing',
+        (WidgetTester tester) async {
+      await pumpHost(tester);
+      AppToast.dismiss(); // must not throw
+      await tester.pump();
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+
+    testWidgets('retime() reschedules the active fire toast from now',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill'),
+        ],
+        duration: const Duration(seconds: 60),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('FIRE NOW'), findsOneWidget);
+
+      // Shorten to 5s while it's on screen.
+      AppToast.retime(const Duration(seconds: 5));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text('FIRE NOW'), findsOneWidget); // still up at +4s
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(find.text('FIRE NOW'), findsNothing); // gone by ~5s, not 60s
+    });
+
+    testWidgets('retime() is a no-op when nothing is showing',
+        (WidgetTester tester) async {
+      await pumpHost(tester);
+      AppToast.retime(const Duration(seconds: 5)); // must not throw
+      await tester.pump();
+      expect(find.byIcon(Icons.close), findsNothing);
+    });
+
+    testWidgets('retime() leaves a non-fire toast on its own schedule',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.success(ctx, 'Saved', duration: const Duration(seconds: 3));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Saved'), findsOneWidget);
+
+      // A fire-time change must NOT extend a success toast (it isn't retimeable).
+      AppToast.retime(const Duration(minutes: 1));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 4)); // past its own 3s hold
+      await tester.pumpAndSettle();
+      expect(find.text('Saved'), findsNothing);
+    });
+
+    testWidgets(
+        'a newer fire swaps content in place without restarting the timer',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill'),
+        ],
+        duration: const Duration(seconds: 10),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300)); // slide-in
+      expect(find.text('Burger'), findsOneWidget);
+
+      // 6s in, a second fire arrives: content swaps to the new dish in place.
+      await tester.pump(const Duration(seconds: 6));
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Fries', stationName: 'Fryer'),
+        ],
+        duration: const Duration(seconds: 10),
+      );
+      await tester.pump();
+      expect(find.text('Fries'), findsOneWidget);
+      expect(find.text('Burger'), findsNothing);
+
+      // The original ~10s countdown is NOT restarted by the second fire, so by
+      // ~11s from first appearance the toast is gone (a re-arm would keep it to
+      // ~16s — that's the bug this guards against).
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      expect(find.text('Fries'), findsNothing);
+    });
+
+    testWidgets('an empty batch shows nothing', (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(ctx, items: const <FireToastItem>[]);
+      await tester.pump();
+      expect(find.byIcon(Icons.close), findsNothing);
+      expect(find.textContaining('FIRE NOW'), findsNothing);
+    });
+  });
+}
