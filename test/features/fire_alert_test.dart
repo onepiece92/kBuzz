@@ -289,6 +289,71 @@ void main() {
     });
   });
 
+  group('firableDishes (done tickets do not fire)', () {
+    Kot kot(String id, {TicketState status = TicketState.active}) => Kot(
+          id: id,
+          table: id,
+          type: KotType.dineIn,
+          orderedAt: DateTime(2026),
+          lines: const <OrderLine>[],
+          status: status,
+        );
+
+    test('drops a cook whose only ticket is done', () {
+      final List<ScheduledDish> kept = firableDishes(
+        <ScheduledDish>[
+          _dish(dishId: 'burger', stationId: 'grill', fireAt: 0, kotIds: <String>['t1']),
+        ],
+        <String, Kot>{'t1': kot('t1', status: TicketState.done)},
+      );
+      expect(kept, isEmpty);
+    });
+
+    test('keeps a cook whose ticket is still active', () {
+      final List<ScheduledDish> kept = firableDishes(
+        <ScheduledDish>[
+          _dish(dishId: 'burger', stationId: 'grill', fireAt: 0, kotIds: <String>['t1']),
+        ],
+        <String, Kot>{'t1': kot('t1')},
+      );
+      expect(kept, hasLength(1));
+    });
+
+    test('keeps a batched cook while any of its tickets is active', () {
+      // One cook serves a done t1 and an active t2 → still fires for t2.
+      final List<ScheduledDish> kept = firableDishes(
+        <ScheduledDish>[
+          _dish(dishId: 'steak', stationId: 'grill', fireAt: 0, kotIds: <String>['t1', 't2']),
+        ],
+        <String, Kot>{
+          't1': kot('t1', status: TicketState.done),
+          't2': kot('t2'),
+        },
+      );
+      expect(kept, hasLength(1));
+    });
+
+    test('then detectFires never buzzes for a done ticket', () {
+      final Set<String> alerted = <String>{};
+      final List<ScheduledDish> dueButDone = firableDishes(
+        <ScheduledDish>[
+          _dish(dishId: 'momo', stationId: 'steam', fireAt: 0, kotIds: <String>['t1']),
+        ],
+        <String, Kot>{'t1': kot('t1', status: TicketState.done)},
+      );
+      expect(
+        detectFires(
+          dishes: dueButDone,
+          stationsById: stations,
+          elapsedMins: 99,
+          started: true,
+          alerted: alerted,
+        ),
+        isEmpty,
+      );
+    });
+  });
+
   group('batchSpokenText', () {
     FireAlert alert(String station, String dish, int qty) => FireAlert(
           stationId: station.toLowerCase(),

@@ -17,6 +17,7 @@ class BoardData {
     required this.now,
     required this.stationsById,
     required this.kotsById,
+    required this.statusByKotId,
   });
 
   factory BoardData.from(DemoData data, {required DateTime now}) {
@@ -37,12 +38,20 @@ class BoardData {
       // Cook each ticket's dishes to plate together (TICKETS.md), not all at once.
       config: const SchedulerConfig(justInTime: true),
     );
+    // Roll up each ticket's plate status once here. The boards re-read it every
+    // clock tick (sorting/filtering tickets); computing it per call would scan
+    // all scheduled dishes each time — O(tickets² × dishes) on the tick path.
+    final Map<String, TicketStatus> statusByKotId = <String, TicketStatus>{
+      for (final Kot k in data.kots)
+        k.id: scheduler.ticketStatusFor(k, result.dishes, now: now),
+    };
     return BoardData._(
       data: data,
       schedule: result,
       now: now,
       stationsById: stationsById,
       kotsById: kotsById,
+      statusByKotId: statusByKotId,
     );
   }
 
@@ -51,6 +60,9 @@ class BoardData {
   final DateTime now;
   final Map<String, Station> stationsById;
   final Map<String, Kot> kotsById;
+
+  /// Per-ticket plate roll-up, precomputed once (see [BoardData.from]).
+  final Map<String, TicketStatus> statusByKotId;
 
   Station? stationOf(String stationId) => stationsById[stationId];
 
@@ -78,26 +90,25 @@ class BoardData {
     return out;
   }
 
-  /// Per-ticket plate roll-up (target vs plate time, lateness).
+  /// Per-ticket plate roll-up (target vs plate time, lateness). O(1) — read from
+  /// the map precomputed in [BoardData.from]; falls back to a live compute for a
+  /// ticket not in this bundle (shouldn't happen).
   TicketStatus statusOf(Kot kot) =>
+      statusByKotId[kot.id] ??
       scheduler.ticketStatusFor(kot, schedule.dishes, now: now);
 
   /// Plate roll-up by ticket id — used to resolve a scheduled dish's
   /// [ScheduledMember]s (which carry only `kotId`) back to a [TicketStatus].
   /// Falls back to a degenerate status for an unknown id (shouldn't happen —
   /// every member id comes from a real [Kot]).
-  TicketStatus statusForKot(String kotId) {
-    final Kot? kot = kotsById[kotId];
-    if (kot == null) {
-      return const TicketStatus(
+  TicketStatus statusForKot(String kotId) =>
+      statusByKotId[kotId] ??
+      const TicketStatus(
         dishes: <ScheduledDish>[],
         targetMins: 0,
         plateMins: 0,
         lateMins: 0,
       );
-    }
-    return statusOf(kot);
-  }
 
   /// True when [stationId] is the bottleneck station.
   bool isBottleneck(String stationId) =>

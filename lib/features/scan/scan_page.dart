@@ -1,11 +1,13 @@
-import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:desktop_drop/desktop_drop.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kbuzz/app/theme.dart';
 import 'package:kbuzz/core/result.dart';
+import 'package:kbuzz/core/widgets/app_badge.dart';
 import 'package:kbuzz/core/widgets/app_toast.dart';
 import 'package:kbuzz/data/ai/ticket_scanner.dart';
 import 'package:kbuzz/data/demo/demo_data.dart';
@@ -23,7 +25,21 @@ import 'package:uuid/uuid.dart';
 /// the ticket by hand (graceful degradation, §8). The created ticket is added to
 /// the board via [DemoDataCubit.addKot].
 class ScanPage extends StatelessWidget {
-  const ScanPage({super.key});
+  const ScanPage({
+    super.key,
+    this.startWithUpload = false,
+    this.dropMode = false,
+  });
+
+  /// When true, opens the gallery image picker on first frame. The Profile
+  /// "upload a ticket image" testing aid launches the scan flow this way so a
+  /// saved KOT/receipt photo can be tested without the camera.
+  final bool startWithUpload;
+
+  /// When true, the capture step is a **drag-and-drop** zone instead of the
+  /// camera/upload buttons — for testing on desktop (macOS), where you can drop a
+  /// saved KOT/receipt image file onto the page.
+  final bool dropMode;
 
   @override
   Widget build(BuildContext context) {
@@ -40,6 +56,8 @@ class ScanPage extends StatelessWidget {
           menu: data.menu,
           stations: data.stations,
           boardEpoch: state.generatedAt!,
+          startWithUpload: startWithUpload,
+          dropMode: dropMode,
         );
       },
     );
@@ -88,11 +106,15 @@ class _ScanFlow extends StatefulWidget {
     required this.menu,
     required this.stations,
     required this.boardEpoch,
+    this.startWithUpload = false,
+    this.dropMode = false,
   });
 
   final List<Dish> menu;
   final List<Station> stations;
   final DateTime boardEpoch;
+  final bool startWithUpload;
+  final bool dropMode;
 
   @override
   State<_ScanFlow> createState() => _ScanFlowState();
@@ -101,37 +123,77 @@ class _ScanFlow extends StatefulWidget {
 enum _Step { capture, review }
 
 class _ScanFlowState extends State<_ScanFlow> {
-  final Random _rng = Random();
   _Step _step = _Step.capture;
   bool _scanning = false;
   _Draft _draft = _Draft.empty();
 
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startWithUpload) {
+      // Launched from the Profile "upload a ticket image" aid: open the gallery
+      // picker once the first frame is up.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scan(source: ImageSource.gallery);
+      });
+    }
+  }
+
   String get _tableStr =>
       _draft.type == KotType.delivery ? 'D${_draft.table}' : '${_draft.table}';
 
-  Future<void> _scan() async {
-    final XFile? file = await _pickImage();
+  /// Pick an image (camera or gallery) and scan it.
+  Future<void> _scan({ImageSource source = ImageSource.camera}) async {
+    if (!_ensureKey()) return;
+    final XFile? file = await _pickImage(source);
     if (!mounted || file == null) return;
+    await _processFile(file);
+  }
 
-    final TicketScanner scanner = context.read<TicketScanner>();
-    if (!scanner.isConfigured) {
-      // No AI key wired up — simulate a draft so the demo still flows.
-      setState(() {
-        _draft = _Draft.random(widget.menu, _rng);
-        _step = _Step.review;
-      });
-      AppToast.show(context, 'Demo scan (no AI key) — review the draft.');
+  /// Scan a dropped file (desktop drag-and-drop test flow).
+  Future<void> _onDrop(XFile file) async {
+    if (!_ensureKey()) return;
+    await _processFile(file);
+  }
+
+  /// True when a Gemini key is configured. Otherwise drops to manual entry (so we
+  /// never fabricate a ticket from the demo menu) and returns false.
+  bool _ensureKey() {
+    if (context.read<TicketScanner>().isConfigured) return true;
+    setState(() {
+      _draft = _Draft.empty();
+      _step = _Step.review;
+    });
+    AppToast.show(
+      context,
+      'No AI key — add a Gemini key in Profile to auto-read tickets, '
+      'or enter it manually.',
+    );
+    return false;
+  }
+
+  /// Send [file]'s bytes to the scanner and route to review on success, or to
+  /// manual entry (with the reason) on failure. Shared by pick + drop.
+  Future<void> _processFile(XFile file) async {
+    setState(() => _scanning = true);
+    final Uint8List bytes;
+    try {
+      bytes = await file.readAsBytes();
+    } on Object catch (_) {
+      if (!mounted) return;
+      setState(() => _scanning = false);
+      AppToast.error(context, 'Could not read that image — try another file.');
       return;
     }
-
-    setState(() => _scanning = true);
-    final Uint8List bytes = await file.readAsBytes();
-    final Result<ScannedTicket> result = await scanner.scan(
-      imageBytes: bytes,
-      mediaType: _mediaTypeOf(file),
-      menu: widget.menu,
-      stations: widget.stations,
-    );
+    if (!mounted) return;
+    final Result<ScannedTicket> result = await context
+        .read<TicketScanner>()
+        .scan(
+          imageBytes: bytes,
+          mediaType: _mediaTypeOf(file),
+          menu: widget.menu,
+          stations: widget.stations,
+        );
     if (!mounted) return;
     setState(() => _scanning = false);
     result.when(
@@ -143,26 +205,30 @@ class _ScanFlowState extends State<_ScanFlow> {
         AppToast.success(context, 'Scanned — review and add.');
       },
       err: (AppFailure f) {
-        // Couldn't read it — drop to manual entry with the reason.
         setState(() {
           _draft = _Draft.empty();
           _step = _Step.review;
         });
-        AppToast.failure(context, f);
+        AppToast.error(context, '${f.message} Enter it manually.');
       },
     );
   }
 
-  Future<XFile?> _pickImage() async {
+  Future<XFile?> _pickImage(ImageSource source) async {
     try {
       return await ImagePicker().pickImage(
-        source: ImageSource.camera,
+        source: source,
         maxWidth: 1600,
         imageQuality: 80,
       );
     } on Object catch (_) {
       if (!mounted) return null;
-      AppToast.error(context, 'Camera unavailable — enter manually.');
+      AppToast.error(
+        context,
+        source == ImageSource.camera
+            ? 'Camera unavailable — enter manually.'
+            : 'Could not open the gallery — enter manually.',
+      );
       return null;
     }
   }
@@ -214,7 +280,9 @@ class _ScanFlowState extends State<_ScanFlow> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_step == _Step.capture ? 'Scan KOT' : 'Review KOT'),
+        title: Text(_step == _Step.capture
+            ? (widget.dropMode ? 'Drop a KOT image' : 'Scan KOT')
+            : 'Review KOT'),
         leading: _step == _Step.review
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
@@ -222,20 +290,174 @@ class _ScanFlowState extends State<_ScanFlow> {
               )
             : null,
       ),
-      body: _step == _Step.capture
-          ? _CaptureStep(
-              scanning: _scanning,
-              tableHint: _tableStr,
-              onScan: _scan,
-              onManual: _manual,
-            )
-          : _ReviewStep(
+      body: _step == _Step.review
+          ? _ReviewStep(
               draft: _draft,
               menu: widget.menu,
               tableStr: _tableStr,
               onChanged: () => setState(() {}),
               onSubmit: _submit,
+            )
+          : widget.dropMode
+              ? _DropCaptureStep(
+                  scanning: _scanning,
+                  onDropFile: _onDrop,
+                  onManual: _manual,
+                )
+              : _CaptureStep(
+                  scanning: _scanning,
+                  tableHint: _tableStr,
+                  onScan: () => _scan(),
+                  onUpload: () => _scan(source: ImageSource.gallery),
+                  onManual: _manual,
+                ),
+    );
+  }
+}
+
+/// Drag-and-drop capture (desktop/macOS testing): drop a KOT/receipt image file
+/// onto the zone to scan it. A manual-entry fallback is always available.
+class _DropCaptureStep extends StatefulWidget {
+  const _DropCaptureStep({
+    required this.scanning,
+    required this.onDropFile,
+    required this.onManual,
+  });
+
+  final bool scanning;
+  final void Function(XFile file) onDropFile;
+  final VoidCallback onManual;
+
+  @override
+  State<_DropCaptureStep> createState() => _DropCaptureStepState();
+}
+
+class _DropCaptureStepState extends State<_DropCaptureStep> {
+  bool _hovering = false;
+
+  static const Set<String> _imageExts = <String>{
+    '.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.bmp',
+  };
+
+  bool _isImage(XFile f) {
+    final String n = f.name.toLowerCase();
+    return _imageExts.any(n.endsWith);
+  }
+
+  void _onDone(DropDoneDetails detail) {
+    if (widget.scanning) return;
+    final Iterable<XFile> images = detail.files.where(_isImage);
+    if (images.isEmpty) {
+      AppToast.error(context, 'Drop an image file (jpg / png / …).');
+      return;
+    }
+    widget.onDropFile(images.first);
+  }
+
+  /// Open the native file dialog (macOS NSOpenPanel) to pick an image.
+  Future<void> _browse() async {
+    if (widget.scanning) return;
+    final FilePickerResult? res = await FilePicker.pickFiles(
+      type: FileType.image,
+      dialogTitle: 'Choose a KOT / receipt image',
+    );
+    if (!mounted || res == null || res.files.isEmpty) return;
+    final PlatformFile f = res.files.first;
+    final String? path = f.path;
+    if (path == null) {
+      AppToast.error(context, 'Could not read that file.');
+      return;
+    }
+    widget.onDropFile(XFile(path, name: f.name));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Color border = _hovering
+        ? KBuzzColors.brandPrimary
+        : Colors.white24;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: <Widget>[
+          Expanded(
+            child: DropTarget(
+              onDragEntered: (_) => setState(() => _hovering = true),
+              onDragExited: (_) => setState(() => _hovering = false),
+              onDragDone: (DropDoneDetails d) {
+                setState(() => _hovering = false);
+                _onDone(d);
+              },
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: _hovering
+                      ? KBuzzColors.brandPrimary.withValues(alpha: 0.08)
+                      : Colors.black,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: border, width: 2),
+                ),
+                child: Center(
+                  child: widget.scanning
+                      ? const Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            CircularProgressIndicator(
+                                color: KBuzzColors.brandPrimary),
+                            SizedBox(height: 12),
+                            Text('Reading ticket…',
+                                style: TextStyle(color: Colors.white70)),
+                          ],
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              Icon(Icons.image_outlined,
+                                  size: 48,
+                                  color: _hovering
+                                      ? KBuzzColors.brandPrimary
+                                      : Colors.white38),
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Drag & drop a KOT / receipt image here',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.white70,
+                                    fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'desktop / macOS — or choose a file below',
+                                style: TextStyle(color: Colors.white38),
+                              ),
+                            ],
+                          ),
+                        ),
+                ),
+              ),
             ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: widget.scanning ? null : _browse,
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Choose a file'),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: widget.scanning ? null : widget.onManual,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Enter manually'),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -245,12 +467,14 @@ class _CaptureStep extends StatelessWidget {
     required this.scanning,
     required this.tableHint,
     required this.onScan,
+    required this.onUpload,
     required this.onManual,
   });
 
   final bool scanning;
   final String tableHint;
   final VoidCallback onScan;
+  final VoidCallback onUpload;
   final VoidCallback onManual;
 
   @override
@@ -290,6 +514,15 @@ class _CaptureStep extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: scanning ? null : onUpload,
+              icon: const Icon(Icons.photo_library_outlined),
+              label: const Text('Upload image'),
+            ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: <Widget>[
               Expanded(
@@ -512,20 +745,15 @@ class _LineCard extends StatelessWidget {
                     style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
               if (line.isAdHoc) ...<Widget>[
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: KBuzzColors.brandPrimary.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: const Text(
-                    'off-menu',
-                    style: TextStyle(
-                        color: KBuzzColors.brandPrimary,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800),
-                  ),
+                const AppBadge(
+                  'off-menu',
+                  KBuzzColors.brandPrimary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  horizontal: 6,
+                  vertical: 2,
+                  radius: 5,
+                  alpha: 0.18,
                 ),
                 const SizedBox(width: 6),
               ],
@@ -620,26 +848,6 @@ class _Draft {
       : type = KotType.dineIn,
         table = 1,
         lines = <_DraftLine>[];
-
-  factory _Draft.random(List<Dish> menu, Random rng) {
-    final KotType type = KotType.values[rng.nextInt(KotType.values.length)];
-    final int table =
-        type == KotType.delivery ? 20 + rng.nextInt(30) : 2 + rng.nextInt(18);
-    final List<Dish> pool = <Dish>[...menu]..shuffle(rng);
-    final int n = min(2 + rng.nextInt(3), pool.length); // 2–4 dishes
-    return _Draft(
-      type: type,
-      table: table,
-      lines: <_DraftLine>[
-        for (final Dish d in pool.take(n))
-          _DraftLine(
-            dish: d,
-            qty: 1 + (rng.nextDouble() < 0.2 ? 1 : 0),
-            cookMins: d.cookMins,
-          ),
-      ],
-    );
-  }
 
   /// Build a draft from a vision-scanned ticket. Matched items bind to their menu
   /// dish (with the AI's cook-time suggestion, falling back to the menu default);

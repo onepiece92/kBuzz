@@ -168,24 +168,35 @@ void main() {
     _expectValidated(_ok(await gen.generate(now: now)), now);
   });
 
-  test('maps a non-200 into a NetworkFailure with the API message', () async {
-    final DemoDataGenerator gen = DemoDataGenerator(
-      client: MockClient((_) async => _resp(
-            jsonEncode(<String, Object?>{
-              'error': <String, Object?>{
-                'code': 400,
-                'message': 'API key not valid',
-                'status': 'INVALID_ARGUMENT',
-              },
-            }),
-            400,
-          )),
-      apiKey: 'g-bad',
-    );
-    final AppFailure failure =
-        (await gen.generate(now: now) as Err<DemoData>).failure;
-    expect(failure, isA<NetworkFailure>());
-    expect(failure.message, contains('API key not valid'));
+  test('maps a non-200 into a short, plain-language failure (no API jargon)',
+      () async {
+    Future<AppFailure> failureFor(int status) async {
+      final DemoDataGenerator gen = DemoDataGenerator(
+        client: MockClient((_) async => _resp(
+              jsonEncode(<String, Object?>{
+                'error': <String, Object?>{
+                  'code': status,
+                  'message': 'API key not valid',
+                  'status': 'PERMISSION_DENIED',
+                },
+              }),
+              status,
+            )),
+        apiKey: 'g-bad',
+      );
+      return (await gen.generate(now: now) as Err<DemoData>).failure;
+    }
+
+    // 429 → quota wording; 403 → key/Profile guidance; neither leaks raw jargon.
+    final AppFailure quota = await failureFor(429);
+    expect(quota, isA<NetworkFailure>());
+    expect(quota.message.toLowerCase(), contains('limit'));
+
+    final AppFailure key = await failureFor(403);
+    expect(key.message, contains('Profile'));
+
+    expect(key.message, isNot(contains('PERMISSION_DENIED')));
+    expect(key.message, isNot(contains('API key not valid')));
   });
 
   test('fails cleanly when the dataset has no schedulable tickets', () async {

@@ -179,7 +179,7 @@ class TicketScanner {
       final String detail = _errorMessageFrom(_bodyAsUtf8(res));
       _log.error('HTTP ${res.statusCode}: $detail');
       return Result<ScannedTicket>.err(
-        NetworkFailure('Scan failed (${res.statusCode}): $detail'),
+        NetworkFailure(_statusMessage(res.statusCode)),
       );
     }
 
@@ -193,6 +193,15 @@ class TicketScanner {
     }
   }
 
+  /// A short, plain-language message for a non-200 status. The full technical
+  /// detail is logged — the user just needs to know what to do.
+  String _statusMessage(int status) => switch (status) {
+        429 => 'AI hit its free usage limit. Try again later.',
+        500 || 503 => 'The AI service is busy right now.',
+        401 || 403 => 'AI key was not accepted — check it in Profile.',
+        _ => 'Could not read the ticket.',
+      };
+
   Result<ScannedTicket> _parse(
     String responseBody, {
     required List<Dish> menu,
@@ -204,7 +213,7 @@ class TicketScanner {
         (envelope['candidates'] as List<Object?>?) ?? const <Object?>[];
     if (candidates.isEmpty) {
       return const Result<ScannedTicket>.err(
-        NetworkFailure('The AI returned no result for this image.'),
+        UnknownFailure('Could not read the ticket.'),
       );
     }
     final Map<String, Object?>? content =
@@ -217,7 +226,7 @@ class TicketScanner {
         : (parts.first as Map<String, Object?>?)?['text'] as String?;
     if (text == null || text.trim().isEmpty) {
       return const Result<ScannedTicket>.err(
-        UnknownFailure('The AI returned no ticket.'),
+        UnknownFailure('Could not read the ticket.'),
       );
     }
     final Map<String, Object?> root =
@@ -350,5 +359,8 @@ class TicketScanner {
       'closest station id from the provided list). Estimate "cookMins" in whole '
       'minutes whenever you reasonably can. Infer quantities (default 1), the '
       'order type, and the table/order number when visible. Never invent dish ids '
-      'or station ids that are not in the provided lists.';
+      'or station ids that are not in the provided lists.\n'
+      'CRITICAL: if the image is NOT a kitchen order ticket or receipt (e.g. a '
+      'random photo, an object, a person, or scenery), return an empty "lines" '
+      'array — do not guess or invent items.';
 }

@@ -110,16 +110,14 @@ class DemoDataGenerator {
     } on Object catch (e, st) {
       _log.error('gemini request failed', error: e, stackTrace: st);
       return Result<DemoData>.err(
-        NetworkFailure('Could not reach Gemini.', cause: e),
+        NetworkFailure('Could not reach the AI service.', cause: e),
       );
     }
 
     if (res.statusCode != 200) {
       final String detail = _errorMessageFrom(_bodyAsUtf8(res));
       _log.error('gemini HTTP ${res.statusCode}: $detail');
-      return Result<DemoData>.err(
-        NetworkFailure('Gemini request failed (${res.statusCode}): $detail'),
-      );
+      return Result<DemoData>.err(NetworkFailure(_statusMessage(res.statusCode)));
     }
 
     try {
@@ -129,7 +127,7 @@ class DemoDataGenerator {
           (envelope['candidates'] as List<Object?>?) ?? const <Object?>[];
       if (candidates.isEmpty) {
         return const Result<DemoData>.err(
-          NetworkFailure('Gemini returned no candidates.'),
+          UnknownFailure('The AI did not return usable data.'),
         );
       }
       final Map<String, Object?>? content =
@@ -142,7 +140,7 @@ class DemoDataGenerator {
           : (parts.first as Map<String, Object?>?)?['text'] as String?;
       if (text == null || text.trim().isEmpty) {
         return const Result<DemoData>.err(
-          UnknownFailure('Gemini response contained no dataset.'),
+          UnknownFailure('The AI did not return usable data.'),
         );
       }
       final Map<String, Object?> root =
@@ -151,10 +149,19 @@ class DemoDataGenerator {
     } on Object catch (e, st) {
       _log.error('gemini parse failed', error: e, stackTrace: st);
       return Result<DemoData>.err(
-        UnknownFailure('Gemini returned data we could not read.', cause: e),
+        UnknownFailure('The AI did not return usable data.', cause: e),
       );
     }
   }
+
+  /// A short, plain-language message for a non-200 status. The full technical
+  /// detail is logged (above) — the user just needs to know what to do.
+  String _statusMessage(int status) => switch (status) {
+        429 => 'AI hit its free usage limit. Try again later.',
+        500 || 503 => 'The AI service is busy right now.',
+        401 || 403 => 'AI key was not accepted — check it in Profile.',
+        _ => 'The AI service had a problem.',
+      };
 }
 
 /* ================================================================== */

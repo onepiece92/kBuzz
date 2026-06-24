@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kbuzz/app/theme.dart';
+import 'package:kbuzz/core/format.dart';
+import 'package:kbuzz/core/widgets/app_badge.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
@@ -133,7 +135,7 @@ class _TicketCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _header(done: done, allReady: allReady, status: status),
+          _header(done: done, allReady: allReady),
           const SizedBox(height: 6),
           Text(
             done
@@ -161,7 +163,6 @@ class _TicketCard extends StatelessWidget {
   Widget _header({
     required bool done,
     required bool allReady,
-    required TicketStatus status,
   }) {
     return Row(
       children: <Widget>[
@@ -180,11 +181,7 @@ class _TicketCard extends StatelessWidget {
         if (done)
           const _Tag('DONE', Colors.white38)
         else if (allReady)
-          const _Tag('all ready', _green)
-        else if (status.lateMins > 0)
-          _Tag('+${status.lateMins}m', _red)
-        else
-          const _Tag('on time', _green),
+          const _Tag('all ready', _green),
         const SizedBox(width: 8),
         Text(
           _ageLabel(kot.orderedAt, board.now),
@@ -628,19 +625,8 @@ class _Tag extends StatelessWidget {
   final Color color;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w700),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      AppBadge(text, color, fontSize: 10, horizontal: 7, vertical: 2);
 }
 
 Dish? _dishOf(BoardData board, String dishId) {
@@ -662,17 +648,7 @@ ScheduledDish? _schedFor(BoardData board, String kotId, String dishId) {
 }
 
 /// Ticket code: `T5` (dine-in), `TA3` (takeaway), `D21` (delivery).
-String _codeOf(Kot k) {
-  final String t = k.table;
-  switch (k.type) {
-    case KotType.delivery:
-      return 'D${t.replaceFirst(RegExp(r'^D'), '')}';
-    case KotType.takeaway:
-      return 'TA${t.replaceFirst(RegExp(r'^TA'), '')}';
-    case KotType.dineIn:
-      return 'T${t.replaceFirst(RegExp(r'^T'), '')}';
-  }
-}
+String _codeOf(Kot k) => ticketCode(k.type, k.table);
 
 String _ageLabel(DateTime orderedAt, DateTime epoch) {
   final int mins = epoch.difference(orderedAt).inMinutes;

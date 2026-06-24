@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kbuzz/app/theme.dart';
+import 'package:kbuzz/core/widgets/app_badge.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
@@ -72,21 +73,7 @@ class StatusBadge extends StatelessWidget {
       (final int hold, _) when hold > 0 => ('hold ${hold}m', const Color(0xFF0EA5E9)),
       _ => ('on time', const Color(0xFF10B981)),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
+    return AppBadge(label, color);
   }
 }
 
@@ -256,17 +243,15 @@ class _PriorityBadge extends StatelessWidget {
       PriorityKind.rush => ('RUSH', KBuzzColors.brandPrimary),
       PriorityKind.none => ('', Colors.transparent),
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: styled.$2.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(5),
-      ),
-      child: Text(
-        styled.$1,
-        style: TextStyle(
-            color: styled.$2, fontSize: 9, fontWeight: FontWeight.w800),
-      ),
+    return AppBadge(
+      styled.$1,
+      styled.$2,
+      fontSize: 9,
+      fontWeight: FontWeight.w800,
+      horizontal: 6,
+      vertical: 2,
+      radius: 5,
+      alpha: 0.18,
     );
   }
 }
@@ -330,28 +315,7 @@ class _LiveChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          Icon(icon, size: 12, color: color),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
+    return AppBadge(label, color, icon: icon);
   }
 }
 

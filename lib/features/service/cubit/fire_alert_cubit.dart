@@ -81,6 +81,27 @@ String fireKey(ScheduledDish d) {
   return isRefire ? '$base|refire:${d.fireAt}' : base;
 }
 
+/// The cooks worth firing: a cook stays in the fire stream while at least one
+/// ticket it serves is still active. A cook whose every ticket is
+/// [TicketState.done] is dropped — its food is already plated and gone, so it
+/// must not keep buzzing the kitchen. A batched cook can span several tickets,
+/// so it survives as long as any of them remains active. (A member-less cook
+/// can't happen from the scheduler, but is kept rather than silently dropped.)
+List<ScheduledDish> firableDishes(
+  List<ScheduledDish> dishes,
+  Map<String, Kot> kotsById,
+) =>
+    dishes
+        .where(
+          (ScheduledDish d) =>
+              d.members.isEmpty ||
+              d.members.any(
+                (ScheduledMember m) =>
+                    kotsById[m.kotId]?.status != TicketState.done,
+              ),
+        )
+        .toList(growable: false);
+
 /// Pure detector (AGENTS.md §10.5): the cooks whose `fireAt` the clock has
 /// reached and that haven't been announced yet. **Edge-triggered, once-only** —
 /// mutates [alerted] (adds fired keys); clears it when the run isn't started so
@@ -148,7 +169,8 @@ class FireAlertCubit extends Cubit<FireAlertState> {
       return;
     }
     final BoardData board = BoardData.from(data, now: now);
-    _dishes = board.schedule.dishes;
+    // Don't buzz the kitchen for a closed ticket (see [firableDishes]).
+    _dishes = firableDishes(board.schedule.dishes, board.kotsById);
     _stationsById = board.stationsById;
   }
 

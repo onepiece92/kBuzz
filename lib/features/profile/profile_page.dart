@@ -8,6 +8,7 @@ import 'package:kbuzz/data/demo/demo_data.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
+import 'package:kbuzz/features/scan/scan_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Profile / settings tab.
@@ -31,6 +32,8 @@ class ProfilePage extends StatelessWidget {
             _DemoDataCard(),
             SizedBox(height: 16),
             _ApiKeyCard(),
+            SizedBox(height: 16),
+            _ScanTestCard(),
             SizedBox(height: 16),
             _SponsorsCard(),
           ],
@@ -280,7 +283,12 @@ class _DemoDataCard extends StatelessWidget {
         '${data.kots.length} tickets, '
         '${data.totalDishes} dishes, ${data.stations.length} stations.';
     if (state.error != null) {
-      AppToast.error(context, 'AI generation failed — used sample ($summary)');
+      // Short, plain-language reason; full technical detail stays in the logs.
+      AppToast.error(
+        context,
+        '${state.error} Showing a sample instead.',
+        duration: const Duration(seconds: 5),
+      );
     } else {
       AppToast.success(
         context,
@@ -574,6 +582,61 @@ const List<_Sponsor> _kSponsors = <_Sponsor>[
   _Sponsor('Vcardly - Online Biz Card', 'https://vcardly.link/'),
   _Sponsor('Resume AI', 'https://cvai.dev/'),
 ];
+
+/// Testing aid: upload a saved KOT/receipt photo and run it through the **real**
+/// scan flow (Gemini parse → review → add to the board, ad-hoc dishes and all).
+/// Opens the scan screen with the gallery picker already triggered — no camera
+/// needed, so it works on simulators/desktop. Needs a Gemini key + demo data.
+class _ScanTestCard extends StatelessWidget {
+  const _ScanTestCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: KBuzzColors.surface,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Row(
+              children: <Widget>[
+                Icon(Icons.document_scanner_outlined,
+                    size: 18, color: KBuzzColors.brandPrimary),
+                SizedBox(width: 8),
+                Text(
+                  'Scan a ticket image',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Drag & drop a saved KOT / receipt image onto a test page — for '
+              'desktop / macOS. Needs a Gemini key (above) and generated demo '
+              'data to match against.',
+              style: TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => Navigator.of(context, rootNavigator: true).push(
+                  MaterialPageRoute<void>(
+                    builder: (BuildContext _) =>
+                        const ScanPage(dropMode: true),
+                  ),
+                ),
+                icon: const Icon(Icons.image_outlined),
+                label: const Text('Open drop-to-scan page'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 /// Auto-advancing, swipeable sponsor carousel with dot indicators. Each banner
 /// opens its sponsor's site in the external browser; failures surface a toast.

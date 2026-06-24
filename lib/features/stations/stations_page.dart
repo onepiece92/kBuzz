@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kbuzz/app/theme.dart';
+import 'package:kbuzz/core/format.dart';
+import 'package:kbuzz/core/widgets/app_badge.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
@@ -270,20 +272,10 @@ class _SaturationPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const Color hot = Color(0xFFEF4444);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: saturated ? hot.withValues(alpha: 0.16) : Colors.transparent,
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        saturated ? 'saturated' : '$lanes/$capacity',
-        style: TextStyle(
-          color: saturated ? hot : Colors.white38,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+    return AppBadge(
+      saturated ? 'saturated' : '$lanes/$capacity',
+      saturated ? hot : Colors.white38,
+      alpha: saturated ? 0.16 : 0,
     );
   }
 }
@@ -734,14 +726,4 @@ String _clock(num minutes) {
 
 /// Ticket code for a member: `T5` (dine-in), `TA3` (takeaway), `D21` (delivery)
 /// — mirrors the prototype's `codeOf`.
-String _tableCode(ScheduledMember m) {
-  final String t = m.table;
-  switch (m.type) {
-    case KotType.delivery:
-      return 'D${t.replaceFirst(RegExp(r'^D'), '')}';
-    case KotType.takeaway:
-      return 'TA${t.replaceFirst(RegExp(r'^TA'), '')}';
-    case KotType.dineIn:
-      return 'T${t.replaceFirst(RegExp(r'^T'), '')}';
-  }
-}
+String _tableCode(ScheduledMember m) => ticketCode(m.type, m.table);

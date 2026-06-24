@@ -17,8 +17,10 @@ class ServiceClockCubit extends Cubit<ServiceClockState> {
   /// Selectable speed multipliers (kitchen-time : real-time), as in the prototype.
   static const List<int> speeds = <int>[1, 8, 30];
 
-  /// Real-time granularity of the ticker.
-  static const Duration _tick = Duration(milliseconds: 100);
+  /// Real-time granularity of the ticker. 1s is plenty for a board that shows
+  /// `M:SS` and minute-granular cook statuses, and cuts per-tick rebuilds from
+  /// 10/s to 1/s. (Fast-forward speeds step more coarsely but stay readable.)
+  static const Duration _tick = Duration(seconds: 1);
 
   Timer? _timer;
 
