@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
+import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 import 'package:kbuzz/features/stations/stations_page.dart';
 
@@ -19,6 +20,7 @@ void main() {
         providers: <BlocProvider<dynamic>>[
           BlocProvider<DemoDataCubit>.value(value: demo),
           BlocProvider<ServiceClockCubit>.value(value: clock),
+          BlocProvider<SettingsCubit>(create: (_) => SettingsCubit()),
         ],
         child: const MaterialApp(home: StationsPage()),
       ),

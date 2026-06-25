@@ -234,6 +234,25 @@ void main() {
       expect(d.holdMins, 0);
     });
 
+    test('fireAsap starts a dish now instead of back-scheduling', () {
+      // Shrimp Alfredo (wok, cook 9), takeaway target 11 → default ideal 2.
+      final List<Kot> kots = <Kot>[
+        kot('a', '1', KotType.takeaway, 0, <OrderLine>[ol('Shrimp Alfredo', 1)]),
+      ];
+      expect(run(kots).dishes.single.fireAt, 2); // back-scheduled by default
+      final Schedule asap = schedule(
+        kots: kots,
+        menu: menuById,
+        stations: stationsById,
+        now: now,
+        config: const SchedulerConfig(fireAsap: true),
+      );
+      final ScheduledDish d = asap.dishes.single;
+      expect(d.fireAt, 0); // fires immediately
+      expect(d.finishAt, 9);
+      expect(d.holdMins, 2); // ready 2m before its 11m target
+    });
+
     test('a dish whose ideal is negative is clamped to fire at now', () {
       // Cheeseburger (grill, cook 12), delivery target 0+9=9 → ideal -3.
       final List<Kot> kots = <Kot>[

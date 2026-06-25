@@ -22,7 +22,11 @@ class BoardData {
     required this.stationLanes,
   });
 
-  factory BoardData.from(DemoData data, {required DateTime now}) {
+  factory BoardData.from(
+    DemoData data, {
+    required DateTime now,
+    bool fireImmediately = false,
+  }) {
     final Map<String, Dish> menu = <String, Dish>{
       for (final Dish d in data.menu) d.id: d,
     };
@@ -37,8 +41,11 @@ class BoardData {
       menu: menu,
       stations: stationsById,
       now: now,
-      // Cook each ticket's dishes to plate together (TICKETS.md), not all at once.
-      config: const SchedulerConfig(justInTime: true),
+      // User's cook-timing setting: fire ASAP (start now, no leading idle) or
+      // back-schedule so a ticket's dishes plate together (TICKETS.md default).
+      config: fireImmediately
+          ? const SchedulerConfig(fireAsap: true)
+          : const SchedulerConfig(justInTime: true),
     );
     // Roll up each ticket's plate status once here. The boards re-read it every
     // clock tick (sorting/filtering tickets); computing it per call would scan

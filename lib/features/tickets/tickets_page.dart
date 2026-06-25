@@ -9,6 +9,7 @@ import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/board/board_widgets.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
+import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
 /// Reasons offered when sending a line back (TICKETS.md `RECOOK_REASONS`).
@@ -50,8 +51,12 @@ class TicketsPage extends StatelessWidget {
               title: 'Tickets',
             );
           }
-          final BoardData board =
-              BoardData.from(state.data!, now: state.generatedAt!);
+          final BoardData board = BoardData.from(
+            state.data!,
+            now: state.generatedAt!,
+            fireImmediately:
+                context.watch<SettingsCubit>().state.fireImmediately,
+          );
           // Rebuild on each tick so cooking status / under-lamp stay live.
           return BlocBuilder<ServiceClockCubit, ServiceClockState>(
             builder: (BuildContext context, ServiceClockState clock) =>

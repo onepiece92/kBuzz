@@ -10,6 +10,7 @@ import 'package:kbuzz/data/repositories/kitchen_repository.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
+import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 import 'package:kbuzz/features/tickets/tickets_page.dart';
 
@@ -104,6 +105,7 @@ void main() {
         providers: <BlocProvider<dynamic>>[
           BlocProvider<DemoDataCubit>.value(value: demo),
           BlocProvider<ServiceClockCubit>.value(value: clock),
+          BlocProvider<SettingsCubit>(create: (_) => SettingsCubit()),
         ],
         child: const MaterialApp(home: TicketsPage()),
       ),

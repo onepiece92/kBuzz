@@ -105,18 +105,21 @@ class AppProviders extends StatelessWidget {
           BlocProvider<ServiceClockCubit>(
             create: (BuildContext context) => ServiceClockCubit(),
           ),
+          // App-wide user preferences (fire-toast hold time, cook-timing policy,
+          // …), persisted via the injected SharedPreferences (session-only when
+          // none is injected). Declared before FireAlertCubit, which reads it.
+          BlocProvider<SettingsCubit>(
+            create: (BuildContext context) => SettingsCubit(prefs: prefs),
+          ),
           // Detects fire-next crossings off the clock + schedule; the nav shell
-          // listens and presents (toast + announce).
+          // listens and presents (toast + announce). Uses the cook-timing setting
+          // so alerts fire at the same times the boards show.
           BlocProvider<FireAlertCubit>(
             create: (BuildContext context) => FireAlertCubit(
               data: context.read<DemoDataCubit>(),
               clock: context.read<ServiceClockCubit>(),
+              settings: context.read<SettingsCubit>(),
             ),
-          ),
-          // App-wide user preferences (e.g. fire-toast hold time), persisted via
-          // the injected SharedPreferences (session-only when none is injected).
-          BlocProvider<SettingsCubit>(
-            create: (BuildContext context) => SettingsCubit(prefs: prefs),
           ),
         ],
         child: child,

@@ -14,6 +14,10 @@ void main() {
     required DemoDataCubit demo,
     required SettingsCubit settings,
   }) async {
+    // Tall surface so every Profile card (settings → key → scan → sponsors)
+    // builds in the lazy ListView, keeping finders/ensureVisible reliable.
+    await tester.binding.setSurfaceSize(const Size(1000, 2400));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
         home: MultiBlocProvider(

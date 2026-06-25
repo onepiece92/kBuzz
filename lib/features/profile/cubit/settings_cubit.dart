@@ -37,6 +37,7 @@ class SettingsState extends Equatable {
     required this.fireToastDuration,
     required this.claudeApiKey,
     this.announceEnabled = true,
+    this.fireImmediately = false,
   });
 
   /// How long a fire-next toast stays on screen before auto-dismissing.
@@ -52,6 +53,12 @@ class SettingsState extends Equatable {
   /// the [Announcer] (TTS + chime) while the on-screen fire toast still shows.
   final bool announceEnabled;
 
+  /// Cook-timing policy. `false` (default) ⇒ **just-in-time**: each dish is
+  /// back-scheduled to be ready right at its due time (stations may sit idle
+  /// first). `true` ⇒ **start immediately**: every dish fires as soon as capacity
+  /// allows, so the station starts now. Drives [BoardData.from]'s scheduler config.
+  final bool fireImmediately;
+
   /// Whether AI features have a key to use (in-app key or build-time fallback).
   bool get aiConfigured => claudeApiKey.isNotEmpty || kEnvClaudeKey.isNotEmpty;
 
@@ -59,16 +66,18 @@ class SettingsState extends Equatable {
     Duration? fireToastDuration,
     String? claudeApiKey,
     bool? announceEnabled,
+    bool? fireImmediately,
   }) =>
       SettingsState(
         fireToastDuration: fireToastDuration ?? this.fireToastDuration,
         claudeApiKey: claudeApiKey ?? this.claudeApiKey,
         announceEnabled: announceEnabled ?? this.announceEnabled,
+        fireImmediately: fireImmediately ?? this.fireImmediately,
       );
 
   @override
   List<Object?> get props =>
-      <Object?>[fireToastDuration, claudeApiKey, announceEnabled];
+      <Object?>[fireToastDuration, claudeApiKey, announceEnabled, fireImmediately];
 }
 
 /// Holds app preferences and persists them. Backed by [SharedPreferences] when
@@ -81,12 +90,14 @@ class SettingsCubit extends Cubit<SettingsState> {
         fireToastDuration: _readFireToast(prefs),
         claudeApiKey: prefs?.getString(claudeApiKeyPref) ?? '',
         announceEnabled: prefs?.getBool(_announceKey) ?? true,
+        fireImmediately: prefs?.getBool(_fireImmediatelyKey) ?? false,
       ));
 
   final SharedPreferences? _prefs;
 
   static const String _fireToastKey = 'fireToastSeconds';
   static const String _announceKey = 'announceEnabled';
+  static const String _fireImmediatelyKey = 'fireImmediately';
 
   /// SharedPreferences key for the in-app Claude API key. The DI-wired ticket
   /// scanner and demo-data generator read this same key (see `app/di.dart`), so a
@@ -109,6 +120,14 @@ class SettingsCubit extends Cubit<SettingsState> {
     if (duration == state.fireToastDuration) return;
     emit(state.copyWith(fireToastDuration: duration));
     _prefs?.setInt(_fireToastKey, duration.inSeconds);
+  }
+
+  /// Set (and persist) the cook-timing policy. The boards re-run the scheduler
+  /// off this, so the change is visible immediately (see [BoardData.from]).
+  void setFireImmediately(bool value) {
+    if (value == state.fireImmediately) return;
+    emit(state.copyWith(fireImmediately: value));
+    _prefs?.setBool(_fireImmediatelyKey, value);
   }
 
   /// Set (and persist) the in-app Claude API key. Empty clears it (AI reverts to

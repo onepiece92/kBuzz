@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
+import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/queue/queue_page.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 import 'package:kbuzz/features/tickets/tickets_page.dart';
@@ -25,6 +26,7 @@ Future<_Pumped> _pumpWithDemo(WidgetTester tester, Widget child) async {
       providers: <BlocProvider<dynamic>>[
         BlocProvider<DemoDataCubit>.value(value: demo),
         BlocProvider<ServiceClockCubit>.value(value: clock),
+        BlocProvider<SettingsCubit>(create: (_) => SettingsCubit()),
       ],
       child: MaterialApp(home: child),
     ),

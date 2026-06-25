@@ -118,9 +118,49 @@ class _SettingsCard extends StatelessWidget {
                     ),
                   ),
                   Switch(
+                    key: const Key('announceToggle'),
                     value: state.announceEnabled,
                     onChanged: (bool v) =>
                         context.read<SettingsCubit>().setAnnounceEnabled(v),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(color: Colors.white12, height: 1),
+            const SizedBox(height: 4),
+            BlocBuilder<SettingsCubit, SettingsState>(
+              builder: (BuildContext context, SettingsState state) => Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      const Icon(Icons.timer_outlined,
+                          size: 18, color: KBuzzColors.brandPrimary),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Start cooking immediately',
+                          style: TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      Switch(
+                        key: const Key('fireImmediatelyToggle'),
+                        value: state.fireImmediately,
+                        onChanged: (bool v) => context
+                            .read<SettingsCubit>()
+                            .setFireImmediately(v),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    state.fireImmediately
+                        ? 'Every dish fires as soon as its station is free — '
+                            'stations start right away.'
+                        : 'Just-in-time: each dish starts so it’s ready exactly '
+                            'when due, so a station may sit idle first.',
+                    style: const TextStyle(color: Colors.white54, fontSize: 12),
                   ),
                 ],
               ),

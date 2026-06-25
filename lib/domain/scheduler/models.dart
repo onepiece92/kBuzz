@@ -44,6 +44,7 @@ class SchedulerConfig extends Equatable {
     this.horizonMins = 120,
     this.batchWindowMins = 2,
     this.justInTime = false,
+    this.fireAsap = false,
   });
 
   /// Hard scheduling horizon (`HMAX` in the prototype). Nothing fires at/after it.
@@ -63,9 +64,16 @@ class SchedulerConfig extends Equatable {
   /// app enables it via [BoardData].
   final bool justInTime;
 
+  /// **Fire ASAP** — the opposite policy to back-scheduling: every dish fires as
+  /// early as capacity allows (ideal = now) instead of `target − cook`, so the
+  /// station starts immediately with no leading idle. Re-fires/fire-now keep
+  /// their intended fire time. Mutually exclusive with [justInTime] in practice
+  /// (the app sets one or the other from the user's "cook timing" setting).
+  final bool fireAsap;
+
   @override
   List<Object?> get props =>
-      <Object?>[horizonMins, batchWindowMins, justInTime];
+      <Object?>[horizonMins, batchWindowMins, justInTime, fireAsap];
 }
 
 /// Default kitchen-minutes a fully-ready ticket is retained on a board before it

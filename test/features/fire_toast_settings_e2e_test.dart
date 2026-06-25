@@ -18,7 +18,11 @@ import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 /// hook to push a fire on demand, so the test drives the shell's listener exactly
 /// as a scheduler crossing would — without simulating the whole clock run.
 class _DrivableFireAlertCubit extends FireAlertCubit {
-  _DrivableFireAlertCubit({required super.data, required super.clock});
+  _DrivableFireAlertCubit({
+    required super.data,
+    required super.clock,
+    required super.settings,
+  });
 
   void drive(List<FireAlert> alerts) =>
       emit(FireAlertState(latest: alerts, tick: state.tick + 1));
@@ -38,9 +42,9 @@ void main() {
       generator: DemoDataGenerator.fromEnvironment(),
     );
     final ServiceClockCubit clock = ServiceClockCubit();
-    final _DrivableFireAlertCubit fire =
-        _DrivableFireAlertCubit(data: demo, clock: clock);
     final SettingsCubit settings = SettingsCubit();
+    final _DrivableFireAlertCubit fire =
+        _DrivableFireAlertCubit(data: demo, clock: clock, settings: settings);
 
     addTearDown(() async {
       await fire.close();

@@ -11,6 +11,7 @@ import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/board/board_widgets.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
+import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
 /// Stations rail — each station's scheduled cooks drawn as a lane-packed
@@ -33,8 +34,12 @@ class StationsPage extends StatelessWidget {
               title: 'Stations rail',
             );
           }
-          final BoardData board =
-              BoardData.from(state.data!, now: state.generatedAt!);
+          final BoardData board = BoardData.from(
+            state.data!,
+            now: state.generatedAt!,
+            fireImmediately:
+                context.watch<SettingsCubit>().state.fireImmediately,
+          );
           return _StationsRail(board: board);
         },
       ),
@@ -315,14 +320,22 @@ class _StationTimeline extends StatelessWidget {
           builder: (BuildContext context, BoxConstraints constraints) {
             final double trackW = constraints.maxWidth;
             final double height = lanes * laneHeight;
+            // Each label may extend right up to the next cook in the same lane
+            // (the idle gap), so names read even on short (e.g. drink) bars
+            // instead of being clipped to the time-scaled bar width.
+            final Map<int, double> labelEnd = _labelEnds(trackW);
             return SizedBox(
               height: height,
               width: trackW,
               child: Stack(
                 clipBehavior: Clip.hardEdge,
                 children: <Widget>[
+                  // Colour bars first (time-scaled), then labels on top so a
+                  // name can overflow its bar into the empty track to its right.
                   for (final ScheduledDish d in dishes)
                     _buildBar(d, trackW, clock),
+                  for (final ScheduledDish d in dishes)
+                    _buildLabel(d, trackW, labelEnd[d.uid] ?? trackW, clock),
                   if (clock.started)
                     _buildNowLine(trackW, clock.elapsedMins),
                 ],
@@ -353,6 +366,50 @@ class _StationTimeline extends StatelessWidget {
         selected: d.uid == selectedUid,
         onTap: () => onTap(d.uid),
       ),
+    );
+  }
+
+  /// Right boundary (x) for each dish's label: the next same-lane cook's left
+  /// edge, or the track end — so a name can spill into the idle gap after its
+  /// bar instead of being clipped to the (short) time-scaled bar width.
+  Map<int, double> _labelEnds(double trackW) {
+    double leftOf(ScheduledDish d) =>
+        (d.fireAt / horizonMins * trackW).clamp(0.0, trackW);
+    final Map<int, double> ends = <int, double>{};
+    for (final ScheduledDish d in dishes) {
+      double end = trackW;
+      for (final ScheduledDish o in dishes) {
+        if (o.lane == d.lane && o.fireAt > d.fireAt) {
+          final double ol = leftOf(o);
+          if (ol < end) end = ol;
+        }
+      }
+      ends[d.uid] = end;
+    }
+    return ends;
+  }
+
+  /// The (tap-transparent) label layer for a cook: positioned at its bar but
+  /// allowed to run right up to [endX] so the name reads, ellipsising if even
+  /// that isn't enough. Taps fall through to the colour bar below.
+  Widget _buildLabel(
+    ScheduledDish d,
+    double trackW,
+    double endX,
+    ServiceClockState clock,
+  ) {
+    final double left = (d.fireAt / horizonMins * trackW).clamp(0.0, trackW);
+    final double barW = (d.cookMins / horizonMins * trackW)
+        .clamp(minBarWidth, math.max(minBarWidth, trackW - left));
+    final double width = math.max(barW, endX - left - 2);
+    final DishLiveStatus status =
+        dishLiveStatus(d, clock.elapsedMins, started: clock.started);
+    return Positioned(
+      left: left,
+      top: d.lane * laneHeight,
+      width: width,
+      height: barHeight,
+      child: IgnorePointer(child: _DishBarLabel(dish: d, status: status)),
     );
   }
 
@@ -420,35 +477,31 @@ class _DishBar extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
+        // Time-scaled colour bar only — the name is drawn as a separate label
+        // layer (see [_StationTimeline._buildLabel]) so it can overflow a short
+        // bar and stay readable.
         decoration: BoxDecoration(
           color: color.withValues(alpha: faded ? 0.5 : 1),
           borderRadius: BorderRadius.circular(5),
           border: border,
         ),
         clipBehavior: Clip.hardEdge,
-        child: Stack(
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: _DishBarLabel(dish: dish, status: status),
-            ),
-            if (holding)
-              Positioned(
-                top: 0,
-                bottom: 0,
-                right: 0,
+        child: holding
+            ? Align(
+                alignment: Alignment.centerRight,
                 child: Container(width: 3, color: const Color(0xFFFDE68A)),
-              ),
-          ],
-        ),
+              )
+            : null,
       ),
     );
   }
 }
 
-/// The label inside a [_DishBar]: emoji + name (+qty), a live cooking/ready
-/// glyph, and the optional special-instruction line. Overflows left so a long
-/// name/note never widens the time-scaled bar.
+/// The label for a [_DishBar]: emoji + name (+qty), a live cooking/ready glyph,
+/// and the optional special-instruction line. Drawn as its own layer (see
+/// [_StationTimeline._buildLabel]) sized to its bar plus the idle gap after it,
+/// and **ellipsises** within that width so long names (e.g. drinks) stay legible
+/// rather than being hard-clipped to a short time-scaled bar.
 class _DishBarLabel extends StatelessWidget {
   const _DishBarLabel({required this.dish, required this.status});
 
@@ -463,50 +516,53 @@ class _DishBarLabel extends StatelessWidget {
         if ((m.note ?? '').trim().isNotEmpty) m.note!.trim(),
     ];
     final String? noteText = notes.isEmpty ? null : notes.toSet().join('; ');
-    return ClipRect(
-      child: OverflowBox(
-        alignment: Alignment.centerLeft,
-        maxWidth: double.infinity,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(dish.emoji, style: const TextStyle(fontSize: 11)),
-                const SizedBox(width: 3),
-                Text(
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Text(dish.emoji, style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 3),
+              Flexible(
+                child: Text(
                   dish.qty > 1 ? '${dish.name} ×${dish.qty}' : dish.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  softWrap: false,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                if (status == DishLiveStatus.cooking) ...<Widget>[
-                  const SizedBox(width: 4),
-                  const Icon(Icons.local_fire_department,
-                      size: 11, color: Colors.white),
-                ] else if (status == DishLiveStatus.ready) ...<Widget>[
-                  const SizedBox(width: 4),
-                  const Icon(Icons.check, size: 11, color: Colors.white),
-                ],
-              ],
-            ),
-            if (noteText != null)
-              NoteLine(
-                noteText,
-                color: Colors.white,
-                iconColor: Colors.white70,
-                fontSize: 9,
-                iconSize: 9,
-                fontWeight: FontWeight.w500,
-                topPadding: 1,
-                flexible: false,
               ),
-          ],
-        ),
+              if (status == DishLiveStatus.cooking) ...<Widget>[
+                const SizedBox(width: 4),
+                const Icon(Icons.local_fire_department,
+                    size: 11, color: Colors.white),
+              ] else if (status == DishLiveStatus.ready) ...<Widget>[
+                const SizedBox(width: 4),
+                const Icon(Icons.check, size: 11, color: Colors.white),
+              ],
+            ],
+          ),
+          if (noteText != null)
+            NoteLine(
+              noteText,
+              color: Colors.white,
+              iconColor: Colors.white70,
+              fontSize: 9,
+              iconSize: 9,
+              fontWeight: FontWeight.w500,
+              topPadding: 1,
+              flexible: true,
+              maxLines: 1,
+            ),
+        ],
       ),
     );
   }

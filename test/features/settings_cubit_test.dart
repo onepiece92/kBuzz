@@ -52,6 +52,21 @@ void main() {
       expect(reloaded.state.fireToastDuration, const Duration(minutes: 5));
     });
 
+    test('fireImmediately: defaults off, toggles, persists, reloads', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+
+      final SettingsCubit cubit = SettingsCubit(prefs: prefs);
+      expect(cubit.state.fireImmediately, isFalse); // just-in-time by default
+
+      cubit.setFireImmediately(true);
+      expect(cubit.state.fireImmediately, isTrue);
+      expect(prefs.getBool('fireImmediately'), isTrue);
+
+      final SettingsCubit reloaded = SettingsCubit(prefs: prefs);
+      expect(reloaded.state.fireImmediately, isTrue);
+    });
+
     test('every preset is selectable and round-trips through the cubit', () {
       final SettingsCubit cubit = SettingsCubit();
       for (final FireToastPreset preset in kFireToastPresets) {

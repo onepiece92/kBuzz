@@ -7,6 +7,7 @@ import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
+import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
 /// One "fire next" event — a cook whose `fireAt` the live clock just crossed.
@@ -166,11 +167,20 @@ class FireAlertCubit extends Cubit<FireAlertState> {
   FireAlertCubit({
     required DemoDataCubit data,
     required ServiceClockCubit clock,
-  }) : super(const FireAlertState()) {
+    required SettingsCubit settings,
+  })  : _data = data,
+        _settings = settings,
+        super(const FireAlertState()) {
     _applyData(data.state);
     _dataSub = data.stream.listen(_applyData);
     _clockSub = clock.stream.listen(_onClock);
+    // Re-derive the schedule when the cook-timing policy changes, so alerts fire
+    // at the same times the boards now show.
+    _settingsSub = settings.stream.listen((_) => _applyData(_data.state));
   }
+
+  final DemoDataCubit _data;
+  final SettingsCubit _settings;
 
   List<ScheduledDish> _dishes = const <ScheduledDish>[];
   Map<String, Station> _stationsById = const <String, Station>{};
@@ -178,6 +188,7 @@ class FireAlertCubit extends Cubit<FireAlertState> {
 
   StreamSubscription<DemoDataState>? _dataSub;
   StreamSubscription<ServiceClockState>? _clockSub;
+  StreamSubscription<SettingsState>? _settingsSub;
 
   void _applyData(DemoDataState state) {
     if (isClosed) return;
@@ -188,7 +199,11 @@ class FireAlertCubit extends Cubit<FireAlertState> {
       _stationsById = const <String, Station>{};
       return;
     }
-    final BoardData board = BoardData.from(data, now: now);
+    final BoardData board = BoardData.from(
+      data,
+      now: now,
+      fireImmediately: _settings.state.fireImmediately,
+    );
     // Don't buzz the kitchen for a closed ticket (see [firableDishes]).
     _dishes = firableDishes(board.schedule.dishes, board.kotsById);
     _stationsById = board.stationsById;
@@ -212,6 +227,7 @@ class FireAlertCubit extends Cubit<FireAlertState> {
   Future<void> close() {
     _dataSub?.cancel();
     _clockSub?.cancel();
+    _settingsSub?.cancel();
     return super.close();
   }
 }

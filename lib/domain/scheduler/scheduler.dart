@@ -120,9 +120,11 @@ Schedule schedule({
     }
   }
 
-  // 3. ideal fire per dish.
+  // 3. ideal fire per dish. Default: back-schedule (ready just-in-time). Fire-
+  //    ASAP mode fires as early as capacity allows (ideal = now); re-fires /
+  //    fire-now keep their intended fire time (target − cook == reAt).
   for (final _Working d in dishes) {
-    d.ideal = d.target - d.cook;
+    d.ideal = (config.fireAsap && !d.priority) ? floor : d.target - d.cook;
   }
 
   // 4. sort by ideal, then target, then longer cook first; stable by seq so the
