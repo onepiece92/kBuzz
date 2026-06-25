@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required so release builds can reach the Claude API (scan + AI demo data).
+         Flutter only adds this to the debug manifest, so release APKs have no
+         network access without it. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="kbuzz"
         android:name="${applicationName}"

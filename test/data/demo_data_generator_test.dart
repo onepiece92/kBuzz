@@ -8,9 +8,9 @@ import 'package:kbuzz/data/ai/demo_data_generator.dart';
 import 'package:kbuzz/data/demo/demo_data.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 
-/// The dataset Gemini returns (before validation). Includes records that MUST be
-/// dropped: a dish on a missing station, a line on that dish, and a ticket whose
-/// only line is invalid.
+/// The dataset the model returns (before validation). Includes records that MUST
+/// be dropped: a dish on a missing station, a line on that dish, and a ticket
+/// whose only line is invalid.
 Map<String, Object?> _input() => <String, Object?>{
       'stations': <Map<String, Object?>>[
         <String, Object?>{
@@ -52,7 +52,7 @@ Map<String, Object?> _input() => <String, Object?>{
           'type': 'dineIn',
           'orderedMinsAgo': 2,
           'lines': <Map<String, Object?>>[
-            <String, Object?>{'dishId': 'sekuwa', 'qty': 2},
+            <String, Object?>{'dishId': 'sekuwa', 'qty': 2, 'note': 'extra spicy'},
             <String, Object?>{'dishId': 'ghost', 'qty': 1},
           ],
         },
@@ -67,22 +67,16 @@ Map<String, Object?> _input() => <String, Object?>{
       ],
     };
 
-/// A Gemini generateContent envelope wrapping [text] as the model's reply.
-String _geminiEnvelope(String text) => jsonEncode(<String, Object?>{
-      'candidates': <Map<String, Object?>>[
-        <String, Object?>{
-          'content': <String, Object?>{
-            'role': 'model',
-            'parts': <Map<String, Object?>>[
-              <String, Object?>{'text': text},
-            ],
-          },
-          'finishReason': 'STOP',
-        },
+/// A Claude Messages envelope wrapping [text] as the model's reply.
+String _claudeEnvelope(String text) => jsonEncode(<String, Object?>{
+      'role': 'assistant',
+      'stop_reason': 'end_turn',
+      'content': <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': text},
       ],
     });
 
-/// Build a response from UTF-8 bytes (mirrors how Gemini sends emoji).
+/// Build a response from UTF-8 bytes (so emoji survive the round-trip).
 /// `http.Response(String, …)` would latin1-encode and throw on emoji.
 http.Response _resp(String body, [int status = 200]) => http.Response.bytes(
       utf8.encode(body),
@@ -111,6 +105,7 @@ void _expectValidated(DemoData data, DateTime now) {
   expect(kot.type, KotType.dineIn);
   expect(kot.lines.single.dishId, 'sekuwa');
   expect(kot.lines.single.qty, 2);
+  expect(kot.lines.single.note, 'extra spicy'); // special instruction parsed
   expect(kot.orderedAt, now.subtract(const Duration(minutes: 2)));
 }
 
@@ -124,7 +119,7 @@ void main() {
       apiKey: '',
     );
     expect(gen.isConfigured, isFalse);
-    expect(gen.providerLabel, 'Gemini');
+    expect(gen.providerLabel, 'Claude');
     expect((await gen.generate(now: now)).isOk, isFalse);
   });
 
@@ -135,34 +130,32 @@ void main() {
     expect(gen.isConfigured, isFalse);
   });
 
-  test('parses generateContent and enforces referential integrity', () async {
+  test('parses the Messages reply and enforces referential integrity', () async {
     late http.Request captured;
     final DemoDataGenerator gen = DemoDataGenerator(
       client: MockClient((http.Request req) async {
         captured = req;
-        return _resp(_geminiEnvelope(jsonEncode(_input())));
+        return _resp(_claudeEnvelope(jsonEncode(_input())));
       }),
       apiKey: 'g-test',
-      model: 'gemini-2.0-flash',
+      model: 'claude-opus-4-8',
     );
 
     _expectValidated(_ok(await gen.generate(now: now)), now);
 
-    // Hits the right model endpoint with the key header + JSON mime config.
-    expect(captured.url.path, contains('gemini-2.0-flash:generateContent'));
-    expect(captured.headers['x-goog-api-key'], 'g-test');
+    // Hits the Messages endpoint with the key header + the chosen model in body.
+    expect(captured.url.path, contains('/v1/messages'));
+    expect(captured.headers['x-api-key'], 'g-test');
+    expect(captured.headers['anthropic-version'], isNotEmpty);
     final Map<String, Object?> body =
         jsonDecode(captured.body) as Map<String, Object?>;
-    expect(
-      (body['generationConfig']! as Map<String, Object?>)['responseMimeType'],
-      'application/json',
-    );
+    expect(body['model'], 'claude-opus-4-8');
   });
 
   test('tolerates a ```json fenced body', () async {
     final DemoDataGenerator gen = DemoDataGenerator(
       client: MockClient((_) async =>
-          _resp(_geminiEnvelope('```json\n${jsonEncode(_input())}\n```'))),
+          _resp(_claudeEnvelope('```json\n${jsonEncode(_input())}\n```'))),
       apiKey: 'g-test',
     );
     _expectValidated(_ok(await gen.generate(now: now)), now);
@@ -201,7 +194,7 @@ void main() {
 
   test('fails cleanly when the dataset has no schedulable tickets', () async {
     final DemoDataGenerator gen = DemoDataGenerator(
-      client: MockClient((_) async => _resp(_geminiEnvelope(jsonEncode(
+      client: MockClient((_) async => _resp(_claudeEnvelope(jsonEncode(
             <String, Object?>{
               'stations': <Map<String, Object?>>[
                 <String, Object?>{
@@ -228,5 +221,74 @@ void main() {
       apiKey: 'g-test',
     );
     expect((await gen.generate(now: now)).isOk, isFalse);
+  });
+
+  test('non-JSON body → Err (not a thrown FormatException)', () async {
+    final DemoDataGenerator gen = DemoDataGenerator(
+      client: MockClient((_) async => _resp('not json at all')),
+      apiKey: 'g-test',
+    );
+    expect((await gen.generate(now: now)).isOk, isFalse);
+  });
+
+  test('model text decodes to a list, not an object → Err (shape guard)',
+      () async {
+    // Valid envelope, but the model's text is a JSON array — the `is! Map`
+    // guard must turn this into a clean Err, not a caught TypeError.
+    final DemoDataGenerator gen = DemoDataGenerator(
+      client: MockClient((_) async => _resp(_claudeEnvelope('[1, 2, 3]'))),
+      apiKey: 'g-test',
+    );
+    expect((await gen.generate(now: now)).isOk, isFalse);
+  });
+
+  test('caps pathological note (80) and emoji (8) lengths from the model',
+      () async {
+    final String longNote = 'x' * 200;
+    final String emojiRun = '🔥' * 50; // 50 code points
+    final DemoDataGenerator gen = DemoDataGenerator(
+      client: MockClient((_) async => _resp(_claudeEnvelope(jsonEncode(
+            <String, Object?>{
+              'stations': <Map<String, Object?>>[
+                <String, Object?>{
+                  'id': 'grill',
+                  'name': 'Grill',
+                  'color': '#EF4444',
+                  'capacity': 2,
+                },
+              ],
+              'menu': <Map<String, Object?>>[
+                <String, Object?>{
+                  'id': 'sek',
+                  'name': 'Sek',
+                  'emoji': emojiRun,
+                  'stationId': 'grill',
+                  'cookMins': 10,
+                  'holdable': true,
+                  'batchable': false,
+                },
+              ],
+              'kots': <Map<String, Object?>>[
+                <String, Object?>{
+                  'table': '5',
+                  'type': 'dineIn',
+                  'orderedMinsAgo': 1,
+                  'lines': <Map<String, Object?>>[
+                    <String, Object?>{
+                      'dishId': 'sek',
+                      'qty': 1,
+                      'note': longNote,
+                    },
+                  ],
+                },
+              ],
+            },
+          )))),
+      apiKey: 'g-test',
+    );
+    final DemoData data = _ok(await gen.generate(now: now));
+    // Emoji clamped by code point (no split surrogate); note clamped to 80.
+    expect(data.menu.single.emoji.runes.length, 8);
+    expect(data.kots.single.lines.single.note, hasLength(80));
   });
 }

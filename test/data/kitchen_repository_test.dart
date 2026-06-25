@@ -87,6 +87,31 @@ void main() {
     expect(cleared.menu, hasLength(14));
   });
 
+  test('round-trips a line note through Drift', () async {
+    await repo.seedSampleData(now: now);
+    await repo.addKot(
+      Kot(
+        id: 'noted-1',
+        table: '9',
+        type: KotType.dineIn,
+        orderedAt: now,
+        lines: <OrderLine>[
+          const OrderLine(dishId: 'french-fries', qty: 1, note: 'no salt'),
+          const OrderLine(dishId: 'cheeseburger', qty: 1),
+        ],
+      ),
+    );
+    final Kot reloaded = (await repo.loadSnapshot())
+        .kots
+        .firstWhere((Kot k) => k.id == 'noted-1');
+    final OrderLine fries =
+        reloaded.lines.firstWhere((OrderLine l) => l.dishId == 'french-fries');
+    final OrderLine burger =
+        reloaded.lines.firstWhere((OrderLine l) => l.dishId == 'cheeseburger');
+    expect(fries.note, 'no salt');
+    expect(burger.note, isNull); // no note persists as null, not ''
+  });
+
   test('addKot with ad-hoc dishes adds them to the menu and they resolve',
       () async {
     await repo.seedSampleData(now: now);

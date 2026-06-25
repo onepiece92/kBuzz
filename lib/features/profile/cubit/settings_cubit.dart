@@ -26,37 +26,49 @@ const List<FireToastPreset> kFireToastPresets = <FireToastPreset>[
   FireToastPreset('Until dismissed', Duration(days: 1)),
 ];
 
-/// Compile-time Gemini key fallback (`--dart-define=GEMINI_API_KEY=…`). Used when
-/// the user hasn't entered a key in Profile, so existing build-time keys keep
-/// working and an in-app key simply overrides it.
-const String kEnvGeminiKey = String.fromEnvironment('GEMINI_API_KEY');
+/// Compile-time Claude key fallback (`--dart-define=ANTHROPIC_API_KEY=…`). Used
+/// when the user hasn't entered a key in Profile, so existing build-time keys
+/// keep working and an in-app key simply overrides it.
+const String kEnvClaudeKey = String.fromEnvironment('ANTHROPIC_API_KEY');
 
 /// User-tunable app settings.
 class SettingsState extends Equatable {
   const SettingsState({
     required this.fireToastDuration,
-    required this.geminiApiKey,
+    required this.claudeApiKey,
+    this.announceEnabled = true,
   });
 
   /// How long a fire-next toast stays on screen before auto-dismissing.
   final Duration fireToastDuration;
 
-  /// User-supplied Google Gemini API key. Drives **both** the ticket scanner
-  /// (scan parse) and the AI demo-data generator. Empty here = use the build-time
-  /// [kEnvGeminiKey] if present, else AI is off (manual entry / the sample).
-  final String geminiApiKey;
+  /// User-supplied Anthropic (Claude) API key. Drives **both** the ticket
+  /// scanner (scan parse) and the AI demo-data generator. Empty here = use the
+  /// build-time [kEnvClaudeKey] if present, else AI is off (manual entry / the
+  /// sample).
+  final String claudeApiKey;
+
+  /// Whether fire alerts are spoken aloud. On by default; turning it off mutes
+  /// the [Announcer] (TTS + chime) while the on-screen fire toast still shows.
+  final bool announceEnabled;
 
   /// Whether AI features have a key to use (in-app key or build-time fallback).
-  bool get aiConfigured => geminiApiKey.isNotEmpty || kEnvGeminiKey.isNotEmpty;
+  bool get aiConfigured => claudeApiKey.isNotEmpty || kEnvClaudeKey.isNotEmpty;
 
-  SettingsState copyWith({Duration? fireToastDuration, String? geminiApiKey}) =>
+  SettingsState copyWith({
+    Duration? fireToastDuration,
+    String? claudeApiKey,
+    bool? announceEnabled,
+  }) =>
       SettingsState(
         fireToastDuration: fireToastDuration ?? this.fireToastDuration,
-        geminiApiKey: geminiApiKey ?? this.geminiApiKey,
+        claudeApiKey: claudeApiKey ?? this.claudeApiKey,
+        announceEnabled: announceEnabled ?? this.announceEnabled,
       );
 
   @override
-  List<Object?> get props => <Object?>[fireToastDuration, geminiApiKey];
+  List<Object?> get props =>
+      <Object?>[fireToastDuration, claudeApiKey, announceEnabled];
 }
 
 /// Holds app preferences and persists them. Backed by [SharedPreferences] when
@@ -67,17 +79,19 @@ class SettingsCubit extends Cubit<SettingsState> {
     : _prefs = prefs,
       super(SettingsState(
         fireToastDuration: _readFireToast(prefs),
-        geminiApiKey: prefs?.getString(geminiApiKeyPref) ?? '',
+        claudeApiKey: prefs?.getString(claudeApiKeyPref) ?? '',
+        announceEnabled: prefs?.getBool(_announceKey) ?? true,
       ));
 
   final SharedPreferences? _prefs;
 
   static const String _fireToastKey = 'fireToastSeconds';
+  static const String _announceKey = 'announceEnabled';
 
-  /// SharedPreferences key for the in-app Gemini API key. The DI-wired ticket
+  /// SharedPreferences key for the in-app Claude API key. The DI-wired ticket
   /// scanner and demo-data generator read this same key (see `app/di.dart`), so a
   /// key saved in Profile powers both flows.
-  static const String geminiApiKeyPref = 'geminiApiKey';
+  static const String claudeApiKeyPref = 'claudeApiKey';
 
   /// The factory default (also the pre-injection fallback): keep the prior 3-min
   /// behaviour.
@@ -97,17 +111,25 @@ class SettingsCubit extends Cubit<SettingsState> {
     _prefs?.setInt(_fireToastKey, duration.inSeconds);
   }
 
-  /// Set (and persist) the in-app Gemini API key. Empty clears it (AI reverts to
+  /// Set (and persist) the in-app Claude API key. Empty clears it (AI reverts to
   /// the build-time key if any, else off). Takes effect on the next scan/generate
   /// — both read the key live from the same store.
-  void setGeminiApiKey(String key) {
+  void setClaudeApiKey(String key) {
     final String k = key.trim();
-    if (k == state.geminiApiKey) return;
-    emit(state.copyWith(geminiApiKey: k));
+    if (k == state.claudeApiKey) return;
+    emit(state.copyWith(claudeApiKey: k));
     if (k.isEmpty) {
-      _prefs?.remove(geminiApiKeyPref);
+      _prefs?.remove(claudeApiKeyPref);
     } else {
-      _prefs?.setString(geminiApiKeyPref, k);
+      _prefs?.setString(claudeApiKeyPref, k);
     }
+  }
+
+  /// Toggle (and persist) whether fire alerts are spoken aloud. Muting keeps the
+  /// on-screen fire toast — only the audio (TTS + chime) stops.
+  void setAnnounceEnabled(bool enabled) {
+    if (enabled == state.announceEnabled) return;
+    emit(state.copyWith(announceEnabled: enabled));
+    _prefs?.setBool(_announceKey, enabled);
   }
 }

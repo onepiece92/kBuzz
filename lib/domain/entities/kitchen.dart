@@ -124,6 +124,7 @@ class OrderLine extends Equatable {
     this.recook = 0,
     this.reAt,
     this.reason,
+    this.note,
   });
 
   /// Stable line id (assigned once persisted). Every waiter action targets it;
@@ -132,6 +133,11 @@ class OrderLine extends Equatable {
 
   final String dishId;
   final int qty;
+
+  /// Free-text special instruction for this item, e.g. "less salt", "no onions",
+  /// "extra crispy". Null/empty when there's nothing special. Shown on the
+  /// Tickets + Stations boards and read aloud with the fire alert.
+  final String? note;
 
   /// Cook-time override (minutes) from the review screen; wins over
   /// [Dish.cookMins] when present.
@@ -159,8 +165,10 @@ class OrderLine extends Equatable {
     int? recook,
     int? reAt,
     String? reason,
+    String? note,
     bool clearReAt = false,
     bool clearReason = false,
+    bool clearNote = false,
   }) =>
       OrderLine(
         id: id ?? this.id,
@@ -171,11 +179,21 @@ class OrderLine extends Equatable {
         recook: recook ?? this.recook,
         reAt: clearReAt ? null : (reAt ?? this.reAt),
         reason: clearReason ? null : (reason ?? this.reason),
+        note: clearNote ? null : (note ?? this.note),
       );
 
   @override
-  List<Object?> get props =>
-      <Object?>[id, dishId, qty, cookOverrideMins, state, recook, reAt, reason];
+  List<Object?> get props => <Object?>[
+        id,
+        dishId,
+        qty,
+        cookOverrideMins,
+        state,
+        recook,
+        reAt,
+        reason,
+        note,
+      ];
 }
 
 /// A Kitchen Order Ticket.

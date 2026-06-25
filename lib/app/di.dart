@@ -49,15 +49,15 @@ class AppProviders extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The effective Gemini key, read **live** on each scan/generate: the in-app
+    // The effective Claude key, read **live** on each scan/generate: the in-app
     // key (Profile → Settings, persisted) wins; the build-time
-    // `--dart-define=GEMINI_API_KEY` is the fallback. One key drives both the
+    // `--dart-define=ANTHROPIC_API_KEY` is the fallback. One key drives both the
     // ticket scanner and the AI demo-data generator.
-    String geminiKey() {
-      final String? stored = prefs?.getString(SettingsCubit.geminiApiKeyPref);
+    String claudeKey() {
+      final String? stored = prefs?.getString(SettingsCubit.claudeApiKeyPref);
       return (stored != null && stored.isNotEmpty)
           ? stored
-          : const String.fromEnvironment('GEMINI_API_KEY');
+          : const String.fromEnvironment('ANTHROPIC_API_KEY');
     }
 
     return MultiRepositoryProvider(
@@ -73,17 +73,17 @@ class AppProviders extends StatelessWidget {
           create: (BuildContext context) =>
               KitchenRepository(context.read<AppDatabase>()),
         ),
-        // Live AI demo-data generator (Gemini). Reads the effective key live via
-        // geminiKey() (in-app Profile key, else --dart-define); without either,
+        // Live AI demo-data generator (Claude). Reads the effective key live via
+        // claudeKey() (in-app Profile key, else --dart-define); without either,
         // isConfigured is false and the cubit falls back to the sample.
         RepositoryProvider<DemoDataGenerator>(
           create: (_) =>
-              DemoDataGenerator.resolved(client: http.Client(), apiKey: geminiKey),
+              DemoDataGenerator.resolved(client: http.Client(), apiKey: claudeKey),
         ),
         // Vision-LLM ticket scanner for the scan flow (opt-in via the key).
         RepositoryProvider<TicketScanner>(
           create: (_) =>
-              TicketScanner.resolved(client: http.Client(), apiKey: geminiKey),
+              TicketScanner.resolved(client: http.Client(), apiKey: claudeKey),
         ),
         // Fire-alert audio. On-device TTS+chime in the app (injected by main);
         // a silent no-op by default so tests/CI don't hit platform channels.

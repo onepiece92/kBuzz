@@ -95,6 +95,43 @@ void main() {
       expect(cubit.state.hasData, isFalse);
     });
 
+    test('seedFromScan bootstraps a board when there is none', () {
+      final DemoDataCubit cubit = DemoDataCubit(clock: _FixedClock(now));
+      expect(cubit.state.hasData, isFalse);
+
+      const Station grill =
+          Station(id: 'grill', name: 'Grill', color: 0xFFEF4444, capacity: 2);
+      const Dish stew = Dish(
+        id: 'adhoc-1',
+        name: 'Mystery Stew',
+        emoji: '🍲',
+        stationId: 'grill',
+        cookMins: 9,
+        holdable: true,
+        batchable: false,
+      );
+      final Kot kot = Kot(
+        id: 'k1',
+        table: '7',
+        type: KotType.dineIn,
+        orderedAt: now,
+        lines: const <OrderLine>[OrderLine(dishId: 'adhoc-1', qty: 2)],
+      );
+
+      cubit.seedFromScan(
+        stations: <Station>[grill],
+        menu: <Dish>[stew],
+        kot: kot,
+      );
+
+      expect(cubit.state.hasData, isTrue);
+      expect(cubit.state.data!.stations.single.id, 'grill');
+      expect(cubit.state.data!.menu.single.id, 'adhoc-1');
+      expect(cubit.state.data!.kots.single.table, '7');
+      expect(cubit.state.generatedAt, now);
+      cubit.close();
+    });
+
     test('setStationCapacity updates one station, clamped to ≥1', () {
       final DemoDataCubit cubit = DemoDataCubit(clock: _FixedClock(now));
       cubit.generate();
@@ -115,6 +152,25 @@ void main() {
       final DemoDataCubit cubit = DemoDataCubit(clock: _FixedClock(now));
       cubit.setStationCapacity('steam', 3);
       expect(cubit.state.hasData, isFalse);
+      cubit.close();
+    });
+
+    test('setLineNote sets (trimmed) and clears a line note in memory', () {
+      final DemoDataCubit cubit = DemoDataCubit(clock: _FixedClock(now));
+      cubit.generate();
+      final String id = cubit.state.data!.kots
+          .expand((Kot k) => k.lines)
+          .firstWhere((OrderLine l) => l.id != null)
+          .id!;
+      OrderLine lineNow() => cubit.state.data!.kots
+          .expand((Kot k) => k.lines)
+          .firstWhere((OrderLine l) => l.id == id);
+
+      cubit.setLineNote(id, '  no salt  ');
+      expect(lineNow().note, 'no salt'); // trimmed
+
+      cubit.setLineNote(id, '   '); // whitespace-only clears it
+      expect(lineNow().note, isNull);
       cubit.close();
     });
   });

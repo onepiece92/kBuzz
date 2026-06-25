@@ -210,6 +210,12 @@ class KitchenRepository {
         ),
       );
 
+  /// Set (or clear, when [note] is null) a line's special instruction.
+  Future<void> setLineNote(String lineId, String? note) => _writeLine(
+        lineId,
+        OrderLinesCompanion(note: Value<String?>(note)),
+      );
+
   /// Toggle a ticket's rush flag (tightens its SLA + prioritises all lines).
   Future<void> setRush(String kotId, {required bool on}) =>
       _writeKot(kotId, KotsCompanion(rush: Value<bool>(on)));
@@ -262,6 +268,7 @@ class KitchenRepository {
             dishId: line.dishId,
             qty: line.qty,
             cookOverrideMins: Value<int?>(line.cookOverrideMins),
+            note: Value<String?>(line.note),
           ),
       ]);
     });
@@ -318,6 +325,7 @@ class KitchenRepository {
           recook: r.recook,
           reAt: r.reAtMins,
           reason: r.reason,
+          note: r.note,
         ),
       );
     }

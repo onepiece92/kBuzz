@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:kbuzz/app/theme.dart';
+import 'package:kbuzz/core/clock.dart';
 import 'package:kbuzz/core/result.dart';
 import 'package:kbuzz/core/widgets/app_badge.dart';
 import 'package:kbuzz/core/widgets/app_toast.dart';
@@ -19,7 +20,7 @@ import 'package:uuid/uuid.dart';
 /// Scan flow: capture a photo → vision-LLM parse → review → create KOT
 /// (AGENTS.md §15 milestone 5 / §8). Pushed full-screen above the tab shell.
 ///
-/// "Scan" takes a photo and sends it to [TicketScanner] (Gemini vision) to read
+/// "Scan" takes a photo and sends it to [TicketScanner] (Claude vision) to read
 /// it into a draft against the current menu. Without an API key it falls back to
 /// a simulated draft; on any failure — or via "Enter manually" — the user builds
 /// the ticket by hand (graceful degradation, §8). The created ticket is added to
@@ -46,57 +47,21 @@ class ScanPage extends StatelessWidget {
     return BlocBuilder<DemoDataCubit, DemoDataState>(
       builder: (BuildContext context, DemoDataState state) {
         final DemoData? data = state.data;
-        if (data == null || data.menu.isEmpty) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('Scan KOT')),
-            body: const _NeedsData(),
-          );
-        }
+        final bool hasBoard = data != null;
         return _ScanFlow(
-          menu: data.menu,
-          stations: data.stations,
-          boardEpoch: state.generatedAt!,
+          // With no board yet, scan against an empty menu (every item becomes an
+          // ad-hoc dish) and the default station palette — the scan then
+          // bootstraps a board from what it read (see [_ScanFlowState._submit]).
+          menu: data?.menu ?? const <Dish>[],
+          stations: (data != null && data.stations.isNotEmpty)
+              ? data.stations
+              : defaultStations(),
+          boardEpoch: state.generatedAt,
+          hasBoard: hasBoard,
           startWithUpload: startWithUpload,
           dropMode: dropMode,
         );
       },
-    );
-  }
-}
-
-/// Shown when there's no menu yet — scanning needs stations/menu to schedule.
-class _NeedsData extends StatelessWidget {
-  const _NeedsData();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            const Icon(Icons.menu_book_outlined,
-                size: 48, color: KBuzzColors.brandPrimary),
-            const SizedBox(height: 12),
-            const Text('No menu loaded',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            const Text(
-              'Generate the demo data first so scanned tickets can be priced and '
-              'scheduled.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white54),
-            ),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: () => context.read<DemoDataCubit>().generate(),
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('Generate demo data'),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
@@ -106,13 +71,21 @@ class _ScanFlow extends StatefulWidget {
     required this.menu,
     required this.stations,
     required this.boardEpoch,
+    required this.hasBoard,
     this.startWithUpload = false,
     this.dropMode = false,
   });
 
   final List<Dish> menu;
   final List<Station> stations;
-  final DateTime boardEpoch;
+
+  /// The board epoch (schedule "now"); null when there's no board yet — [_submit]
+  /// then bootstraps one and the cubit stamps a fresh epoch.
+  final DateTime? boardEpoch;
+
+  /// Whether a board already exists. False ⇒ the scan creates one from scratch.
+  final bool hasBoard;
+
   final bool startWithUpload;
   final bool dropMode;
 
@@ -156,7 +129,7 @@ class _ScanFlowState extends State<_ScanFlow> {
     await _processFile(file);
   }
 
-  /// True when a Gemini key is configured. Otherwise drops to manual entry (so we
+  /// True when a Claude key is configured. Otherwise drops to manual entry (so we
   /// never fabricate a ticket from the demo menu) and returns false.
   bool _ensureKey() {
     if (context.read<TicketScanner>().isConfigured) return true;
@@ -166,7 +139,7 @@ class _ScanFlowState extends State<_ScanFlow> {
     });
     AppToast.show(
       context,
-      'No AI key — add a Gemini key in Profile to auto-read tickets, '
+      'No AI key — add a Claude key in Profile to auto-read tickets, '
       'or enter it manually.',
     );
     return false;
@@ -248,6 +221,7 @@ class _ScanFlowState extends State<_ScanFlow> {
 
   void _submit() {
     if (_draft.lines.isEmpty) return;
+    final DemoDataCubit cubit = context.read<DemoDataCubit>();
     final Duration elapsed = context.read<ServiceClockCubit>().state.elapsed;
     // Off-menu (ad-hoc) dishes must join the menu so the scheduler can place them.
     final List<Dish> newDishes = <Dish>[
@@ -257,7 +231,9 @@ class _ScanFlowState extends State<_ScanFlow> {
       id: const Uuid().v4(),
       table: _tableStr,
       type: _draft.type,
-      orderedAt: widget.boardEpoch.add(elapsed),
+      // With no board yet the epoch is "now"; otherwise it's the board epoch + the
+      // run's elapsed time, so the order lands at the current service moment.
+      orderedAt: (widget.boardEpoch ?? context.read<Clock>().now()).add(elapsed),
       lines: <OrderLine>[
         for (final _DraftLine l in _draft.lines)
           OrderLine(
@@ -268,7 +244,19 @@ class _ScanFlowState extends State<_ScanFlow> {
           ),
       ],
     );
-    context.read<DemoDataCubit>().addKot(kot, newDishes: newDishes);
+    if (widget.hasBoard) {
+      cubit.addKot(kot, newDishes: newDishes);
+    } else {
+      // No board yet: build one from the scan — every scanned dish becomes the
+      // menu, the stations they use become the config, the ticket the first order.
+      final List<Dish> menu = <Dish>[for (final _DraftLine l in _draft.lines) l.dish];
+      final Set<String> usedStationIds =
+          menu.map((Dish d) => d.stationId).toSet();
+      final List<Station> stations = widget.stations
+          .where((Station s) => usedStationIds.contains(s.id))
+          .toList();
+      cubit.seedFromScan(stations: stations, menu: menu, kot: kot);
+    }
     AppToast.success(
       context,
       'Added $_tableStr — ${_draft.lines.length} dishes to the board.',

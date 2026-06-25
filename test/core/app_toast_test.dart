@@ -215,6 +215,44 @@ void main() {
       expect(find.text('Fries'), findsNothing);
     });
 
+    testWidgets('a message toast renders an optional note as a second line',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.success(
+        ctx,
+        'Saved',
+        note: 'Synced to the cloud',
+        duration: const Duration(seconds: 1),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Saved'), findsOneWidget);
+      expect(find.text('Synced to the cloud'), findsOneWidget);
+
+      await flush(tester);
+    });
+
+    testWidgets('a fire toast renders an optional note under the header',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill'),
+        ],
+        note: 'Plate together',
+        duration: const Duration(seconds: 1),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('FIRE NOW'), findsOneWidget);
+      expect(find.text('Plate together'), findsOneWidget);
+
+      await flush(tester);
+    });
+
     testWidgets('an empty batch shows nothing', (WidgetTester tester) async {
       final BuildContext ctx = await pumpHost(tester);
       AppToast.fire(ctx, items: const <FireToastItem>[]);

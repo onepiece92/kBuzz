@@ -252,6 +252,36 @@ void main() {
       ];
       expect(run(kots).dishes, isEmpty);
     });
+
+    test('a dish on an unknown station schedules at capacity 1, not a crash',
+        () {
+      // The dish exists but its station id isn't in the stations map. The
+      // scheduler must not throw — it falls back to capacity 1 and still places
+      // the cook (documents the phantom-station behaviour; station ids are
+      // validated upstream in the AI/scan layers, so this can't happen there).
+      const Dish ghost = Dish(
+        id: 'ph',
+        name: 'Phantom Plate',
+        emoji: '🍽️',
+        stationId: 'no-such-station',
+        cookMins: 5,
+        holdable: false,
+        batchable: false,
+      );
+      final Schedule s = schedule(
+        kots: <Kot>[
+          kot('a', '1', KotType.dineIn, 0, const <OrderLine>[
+            OrderLine(dishId: 'ph', qty: 1),
+          ]),
+        ],
+        menu: const <String, Dish>{'ph': ghost},
+        stations: stationsById, // intentionally lacks 'no-such-station'
+        now: now,
+      );
+      expect(s.dishes, hasLength(1));
+      expect(s.dishes.single.stationId, 'no-such-station');
+      expect(s.dishes.single.fireAt, greaterThanOrEqualTo(0));
+    });
   });
 }
 

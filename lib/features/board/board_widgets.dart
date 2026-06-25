@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kbuzz/app/theme.dart';
 import 'package:kbuzz/core/widgets/app_badge.dart';
+import 'package:kbuzz/core/widgets/note_line.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
@@ -133,6 +134,13 @@ class ScheduledDishRow extends StatelessWidget {
         : dish.holdMins > 0
             ? ('can hold ${dish.holdMins}m', const Color(0xFF0EA5E9))
             : ('on time', const Color(0xFF10B981));
+    // Distinct special instructions across the tickets this (possibly batched)
+    // cook serves, shown as a line under the dish name.
+    final List<String> notes = <String>[
+      for (final ScheduledMember m in dish.members)
+        if ((m.note ?? '').trim().isNotEmpty) m.note!.trim(),
+    ];
+    final String? noteText = notes.isEmpty ? null : notes.toSet().join('; ');
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
@@ -163,6 +171,8 @@ class ScheduledDishRow extends StatelessWidget {
                   ],
                 ],
               ),
+              if (noteText != null)
+                NoteLine(noteText, iconSize: 12, maxLines: 1),
               const SizedBox(height: 2),
               Row(
                 children: <Widget>[

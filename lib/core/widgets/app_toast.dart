@@ -51,6 +51,7 @@ abstract final class AppToast {
     String message, {
     AppToastType type = AppToastType.info,
     Duration duration = const Duration(seconds: 3),
+    String? note,
   }) {
     _insert(
       context,
@@ -60,30 +61,46 @@ abstract final class AppToast {
         icon: type.icon,
         message: message,
         accent: type.accent,
+        note: note,
       ),
     );
   }
 
-  /// Convenience: a green success toast.
+  /// Convenience: a green success toast. [note] is an optional second line.
   static void success(
     BuildContext context,
     String message, {
     Duration duration = const Duration(seconds: 3),
-  }) => show(context, message, type: AppToastType.success, duration: duration);
+    String? note,
+  }) => show(
+        context,
+        message,
+        type: AppToastType.success,
+        duration: duration,
+        note: note,
+      );
 
-  /// Convenience: a red error toast.
+  /// Convenience: a red error toast. [note] is an optional second line.
   static void error(
     BuildContext context,
     String message, {
     Duration duration = const Duration(seconds: 4),
-  }) => show(context, message, type: AppToastType.error, duration: duration);
+    String? note,
+  }) => show(
+        context,
+        message,
+        type: AppToastType.error,
+        duration: duration,
+        note: note,
+      );
 
   /// Convenience: surface an [AppFailure]'s user-safe message as an error toast.
   static void failure(
     BuildContext context,
     AppFailure failure, {
     Duration duration = const Duration(seconds: 4),
-  }) => error(context, failure.message, duration: duration);
+    String? note,
+  }) => error(context, failure.message, duration: duration, note: note);
 
   /// The bold **"fire next"** alert (§10.5): big mono qty + dish + station per
   /// item, brand-orange accent, held 3 minutes (or until dismissed/replaced).
@@ -95,6 +112,7 @@ abstract final class AppToast {
     BuildContext context, {
     required List<FireToastItem> items,
     Duration duration = const Duration(minutes: 3),
+    String? note,
   }) {
     if (items.isEmpty) return;
     // If a fire toast is already up, swap in the newest batch but keep its
@@ -102,14 +120,14 @@ abstract final class AppToast {
     // restarting on every fire (which, under the fast service clock, kept it up
     // until the rush ended). Falls through to a fresh toast once it has closed.
     final bool Function(Widget)? swap = _activeSetContent;
-    if (swap != null && swap(_FireContent(items: items))) return;
+    if (swap != null && swap(_FireContent(items: items, note: note))) return;
     _insert(
       context,
       accent: KBuzzColors.brandPrimary,
       duration: duration,
       showClose: true,
       retimeable: true,
-      child: _FireContent(items: items),
+      child: _FireContent(items: items, note: note),
     );
   }
 
@@ -230,7 +248,7 @@ class _AppToastViewState extends State<_AppToastView>
   /// animation), cancelling any prior timer.
   void _scheduleDismiss(Duration hold) {
     _dismissTimer?.cancel();
-    _dismissTimer = Timer(hold + _controller.duration!, _close);
+    _dismissTimer = Timer(hold + (_controller.duration ?? Duration.zero), _close);
   }
 
   /// Live re-time from a settings change: keep this toast up for [hold] more,
@@ -356,26 +374,47 @@ class _MessageContent extends StatelessWidget {
     required this.icon,
     required this.message,
     required this.accent,
+    this.note,
   });
 
   final IconData icon;
   final String message;
   final Color accent;
 
+  /// Optional smaller second line under [message] (extra detail / hint).
+  final String? note;
+
   @override
   Widget build(BuildContext context) {
+    final String? note = this.note;
+    final bool hasNote = note != null && note.isNotEmpty;
     return Row(
+      crossAxisAlignment:
+          hasNote ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: <Widget>[
         Icon(icon, color: accent, size: 22),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            message,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(
+                message,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (note != null && note.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 2),
+                Text(
+                  note,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ],
           ),
         ),
       ],
@@ -405,13 +444,17 @@ class FireToastItem {
 /// fire at once) over one [_FireRow] per item. The list scrolls if a big batch
 /// outgrows ~70% of the screen, so it never overflows.
 class _FireContent extends StatelessWidget {
-  const _FireContent({required this.items});
+  const _FireContent({required this.items, this.note});
 
   final List<FireToastItem> items;
+
+  /// Optional smaller note line under the header.
+  final String? note;
 
   @override
   Widget build(BuildContext context) {
     final double maxListHeight = MediaQuery.sizeOf(context).height * 0.7;
+    final String? note = this.note;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -429,6 +472,14 @@ class _FireContent extends StatelessWidget {
             ),
           ),
         ),
+        if (note != null && note.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, right: 28),
+            child: Text(
+              note,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ),
         const SizedBox(height: 6),
         ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxListHeight),

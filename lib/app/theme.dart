@@ -37,6 +37,18 @@ const Map<String, Color> kStationColors = <String, Color>{
   'bar': Color(0xFF14B8A6),
 };
 
+/// Expo / ticket status palette — the colours the **waiter** boards use to flag a
+/// line's plate state. Defined once here so a rebrand is a single edit (the
+/// Tickets page and the shared [NoteLine] reference these, not raw hex).
+///
+/// Distinct from the kitchen-side *slack* palette in `board_widgets.dart`
+/// (planned hold/late/on-time), which encodes scheduler slack rather than expo
+/// state — keep the two separate.
+const Color kStatusReady = Color(0xFF34D399); // green — all lines plated/ready
+const Color kStatusHeld = Color(0xFFFBBF24); // amber — held / special note
+const Color kStatusLate = Color(0xFFF87171); // red — past target
+const Color kStatusFiring = KBuzzColors.brandPrimary; // orange — rush / firing
+
 /// Monospace style for all clocks, timers and quantities (AGENTS.md §12).
 const TextStyle kMonoNumberStyle = TextStyle(
   fontFamily: 'monospace',

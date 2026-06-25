@@ -71,6 +71,7 @@ Schedule schedule({
             table: k.table,
             type: k.type,
             qty: line.qty,
+            note: line.note,
           ),
         ),
       );

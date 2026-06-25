@@ -21,7 +21,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -35,6 +35,10 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(orderLines, orderLines.reason);
             await m.addColumn(kots, kots.status);
             await m.addColumn(kots, kots.rush);
+          }
+          // v2 → v3: per-line special instruction (note).
+          if (from < 3) {
+            await m.addColumn(orderLines, orderLines.note);
           }
         },
       );

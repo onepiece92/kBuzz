@@ -45,7 +45,7 @@ class DemoDataCubit extends Cubit<DemoDataState> {
   /// [generate] falls back to the deterministic sample.
   bool get aiEnabled => _generator?.isConfigured ?? false;
 
-  /// Short name of the active AI provider (`'Gemini'` or `'none'`).
+  /// Short name of the active AI provider (`'Claude'` or `'none'`).
   String get aiProvider => _generator?.providerLabel ?? 'none';
 
   Future<void>? _pending;
@@ -69,7 +69,7 @@ class DemoDataCubit extends Cubit<DemoDataState> {
 
   /// Generate (or regenerate) a fresh demo dataset.
   ///
-  /// When AI is configured ([aiEnabled]), asks Gemini for a brand-new
+  /// When AI is configured ([aiEnabled]), asks Claude for a brand-new
   /// restaurant + rush; otherwise (or if the call fails) falls back to a
   /// **randomized** rush ([buildRandomDemoData]) — longer than the static sample
   /// and different every tap. Emits a `generating` state while a live request is
@@ -104,6 +104,22 @@ class DemoDataCubit extends Cubit<DemoDataState> {
     final DemoData withIds = _ensureLineIds(data);
     emit(DemoDataState(data: withIds, generatedAt: now, error: error));
     _persist((KitchenRepository repo) => repo.replaceAll(withIds));
+  }
+
+  /// Bootstrap a board from a scanned ticket when there's no demo data yet — the
+  /// scanned (ad-hoc) dishes become the menu, the stations they use become the
+  /// config, and the ticket is the first order. Backs the scan flow's "build the
+  /// board from the scan" path, so a KOT can be scanned without generating demo
+  /// data first. Sets a fresh board epoch ([now]) and writes through to Drift.
+  void seedFromScan({
+    required List<Station> stations,
+    required List<Dish> menu,
+    required Kot kot,
+  }) {
+    _emitData(
+      DemoData(stations: stations, menu: menu, kots: <Kot>[kot]),
+      now: _clock.now(),
+    );
   }
 
   /// Drop the demo data back to empty (config + tickets).
@@ -235,6 +251,17 @@ class DemoDataCubit extends Cubit<DemoDataState> {
     _persist((KitchenRepository r) => r.serveAll(kotId));
   }
 
+  /// Set (or clear, when empty) a line's special instruction (e.g. "no salt").
+  void setLineNote(String lineId, String? note) {
+    final String? clean = (note ?? '').trim().isEmpty ? null : note!.trim();
+    _updateLine(
+      lineId,
+      (OrderLine l) =>
+          clean == null ? l.copyWith(clearNote: true) : l.copyWith(note: clean),
+    );
+    _persist((KitchenRepository r) => r.setLineNote(lineId, clean));
+  }
+
   void setRush(String kotId, {required bool on}) {
     _updateKot(kotId, (Kot k) => k.copyWith(rush: on));
     _persist((KitchenRepository r) => r.setRush(kotId, on: on));
@@ -313,9 +340,24 @@ class DemoDataCubit extends Cubit<DemoDataState> {
   void _persist(Future<void> Function(KitchenRepository repo) op) {
     final KitchenRepository? repo = _repository;
     if (repo == null) return;
-    _pending = op(repo).catchError((Object e, StackTrace st) {
+    _pending = _guardedPersist(op, repo);
+  }
+
+  /// Runs a write-through op, swallowing (logging) any failure so a Drift error
+  /// never escapes as an unhandled async error. A plain `.catchError` here is a
+  /// trap: most ops return `Future<DemoData>` (e.g. `replaceAll`), not
+  /// `Future<void>`, so a void-returning error handler throws
+  /// `ArgumentError` ("must return a value of the future's type") on the very
+  /// failure it's meant to absorb. `try/await` sidesteps the typed return.
+  Future<void> _guardedPersist(
+    Future<void> Function(KitchenRepository repo) op,
+    KitchenRepository repo,
+  ) async {
+    try {
+      await op(repo);
+    } on Object catch (e, st) {
       _log.error('persist failed', error: e, stackTrace: st);
-    });
+    }
   }
 }
 

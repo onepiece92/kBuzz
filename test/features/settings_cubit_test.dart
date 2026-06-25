@@ -60,34 +60,58 @@ void main() {
       }
     });
 
-    test('gemini key: trims, persists, flips aiConfigured, reloads', () async {
+    test('claude key: trims, persists, flips aiConfigured, reloads', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{});
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       final SettingsCubit cubit = SettingsCubit(prefs: prefs);
-      expect(cubit.state.geminiApiKey, '');
+      expect(cubit.state.claudeApiKey, '');
       expect(cubit.state.aiConfigured, isFalse); // no key, no --dart-define
 
-      cubit.setGeminiApiKey('  AIza-test-key  ');
-      expect(cubit.state.geminiApiKey, 'AIza-test-key'); // trimmed
+      cubit.setClaudeApiKey('  sk-ant-test-key  ');
+      expect(cubit.state.claudeApiKey, 'sk-ant-test-key'); // trimmed
       expect(cubit.state.aiConfigured, isTrue);
-      expect(prefs.getString(SettingsCubit.geminiApiKeyPref), 'AIza-test-key');
+      expect(prefs.getString(SettingsCubit.claudeApiKeyPref), 'sk-ant-test-key');
 
       // A fresh cubit over the same store reflects the persisted key — the same
       // store the DI-wired scanner + demo generator read, so both pick it up.
-      expect(SettingsCubit(prefs: prefs).state.geminiApiKey, 'AIza-test-key');
+      expect(SettingsCubit(prefs: prefs).state.claudeApiKey, 'sk-ant-test-key');
     });
 
-    test('clearing the gemini key removes it from prefs', () async {
+    test('clearing the claude key removes it from prefs', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
-        SettingsCubit.geminiApiKeyPref: 'AIza-old',
+        SettingsCubit.claudeApiKeyPref: 'sk-ant-old',
       });
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       final SettingsCubit cubit = SettingsCubit(prefs: prefs);
-      expect(cubit.state.geminiApiKey, 'AIza-old');
+      expect(cubit.state.claudeApiKey, 'sk-ant-old');
 
-      cubit.setGeminiApiKey('');
-      expect(cubit.state.geminiApiKey, '');
-      expect(prefs.getString(SettingsCubit.geminiApiKeyPref), isNull);
+      cubit.setClaudeApiKey('');
+      expect(cubit.state.claudeApiKey, '');
+      expect(prefs.getString(SettingsCubit.claudeApiKeyPref), isNull);
+    });
+
+    test('announceEnabled defaults on; toggling persists and reloads', () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final SettingsCubit cubit = SettingsCubit(prefs: prefs);
+      expect(cubit.state.announceEnabled, isTrue); // on by default
+
+      cubit.setAnnounceEnabled(false);
+      expect(cubit.state.announceEnabled, isFalse);
+      expect(prefs.getBool('announceEnabled'), isFalse);
+
+      // A fresh cubit over the same store stays muted.
+      expect(SettingsCubit(prefs: prefs).state.announceEnabled, isFalse);
+    });
+
+    test('setAnnounceEnabled is a no-op when the value is unchanged', () async {
+      final SettingsCubit cubit = SettingsCubit();
+      int emissions = 0;
+      cubit.stream.listen((_) => emissions++);
+
+      cubit.setAnnounceEnabled(true); // already the default
+      await Future<void>.delayed(Duration.zero);
+      expect(emissions, 0);
     });
   });
 }

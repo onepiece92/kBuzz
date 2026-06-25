@@ -97,6 +97,34 @@ class _SettingsCard extends StatelessWidget {
                 );
               },
             ),
+            const SizedBox(height: 8),
+            const Divider(color: Colors.white12, height: 1),
+            const SizedBox(height: 4),
+            BlocBuilder<SettingsCubit, SettingsState>(
+              builder: (BuildContext context, SettingsState state) => Row(
+                children: <Widget>[
+                  Icon(
+                    state.announceEnabled
+                        ? Icons.volume_up
+                        : Icons.volume_off,
+                    size: 18,
+                    color: KBuzzColors.brandPrimary,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Read fires aloud',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  Switch(
+                    value: state.announceEnabled,
+                    onChanged: (bool v) =>
+                        context.read<SettingsCubit>().setAnnounceEnabled(v),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
@@ -136,10 +164,11 @@ class _PresetChip extends StatelessWidget {
   }
 }
 
-/// Lets the user paste a Google Gemini API key. Persisted via [SettingsCubit]
-/// and read live by **both** the ticket scanner (scan parse) and the AI
-/// demo-data generator (see `app/di.dart`) — so one key powers both. Stored
-/// on-device only; the build-time `--dart-define=GEMINI_API_KEY` is the fallback.
+/// Lets the user paste an Anthropic (Claude) API key. Persisted via
+/// [SettingsCubit] and read live by **both** the ticket scanner (scan parse) and
+/// the AI demo-data generator (see `app/di.dart`) — so one key powers both.
+/// Stored on-device only; the build-time `--dart-define=ANTHROPIC_API_KEY` is the
+/// fallback.
 class _ApiKeyCard extends StatefulWidget {
   const _ApiKeyCard();
 
@@ -154,7 +183,7 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
   @override
   void initState() {
     super.initState();
-    _controller.text = context.read<SettingsCubit>().state.geminiApiKey;
+    _controller.text = context.read<SettingsCubit>().state.claudeApiKey;
   }
 
   @override
@@ -165,18 +194,18 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
 
   void _save() {
     final String key = _controller.text.trim();
-    context.read<SettingsCubit>().setGeminiApiKey(key);
+    context.read<SettingsCubit>().setClaudeApiKey(key);
     FocusScope.of(context).unfocus();
     AppToast.success(
       context,
       key.isEmpty
-          ? 'Gemini key cleared — scan & AI demo use manual / sample.'
-          : 'Gemini key saved — scanning and AI demo data are on.',
+          ? 'Claude key cleared — scan & AI demo use manual / sample.'
+          : 'Claude key saved — scanning and AI demo data are on.',
     );
   }
 
   Future<void> _getKey() async {
-    final Uri url = Uri.parse('https://aistudio.google.com/apikey');
+    final Uri url = Uri.parse('https://console.anthropic.com/settings/keys');
     final bool ok = await launchUrl(url, mode: LaunchMode.externalApplication);
     if (!ok && mounted) AppToast.error(context, 'Could not open the browser.');
   }
@@ -195,7 +224,7 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
                 Icon(Icons.key, size: 18, color: KBuzzColors.brandPrimary),
                 SizedBox(width: 8),
                 Text(
-                  'Gemini API key',
+                  'Claude API key',
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ],
@@ -214,7 +243,7 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
               autocorrect: false,
               enableSuggestions: false,
               decoration: InputDecoration(
-                hintText: 'AIza…',
+                hintText: 'sk-ant-…',
                 isDense: true,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
@@ -301,7 +330,7 @@ class _DemoDataCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Watch settings so the AI badge flips the moment a key is saved/cleared:
-    // the in-app Gemini key drives the generator, and SettingsState.aiConfigured
+    // the in-app Claude key drives the generator, and SettingsState.aiConfigured
     // is the same live truth (in-app key or build-time fallback).
     final bool aiEnabled = context.watch<SettingsCubit>().state.aiConfigured;
     final String provider = context.read<DemoDataCubit>().aiProvider;
@@ -328,8 +357,8 @@ class _DemoDataCard extends StatelessWidget {
                   ? 'Generate a brand-new restaurant and dinner rush with '
                         '$provider — a different menu and tickets every time.'
                   : 'Seed the prototype sample rush so you can test the boards. '
-                        'For a fresh AI dataset every time, add a free Gemini key '
-                        'in the “Gemini API key” section below.',
+                        'For a fresh AI dataset every time, add a Claude key '
+                        'in the “Claude API key” section below.',
               style: const TextStyle(color: Colors.white54, fontSize: 13),
             ),
             const SizedBox(height: 16),
@@ -399,7 +428,7 @@ class _DemoDataCard extends StatelessWidget {
 }
 
 /// At-a-glance indicator of whether live AI generation is wired up. Green "AI ·
-/// Gemini" when a Gemini key is set (in-app via the key card, or build-time
+/// Claude" when a Claude key is set (in-app via the key card, or build-time
 /// `--dart-define`); amber "AI OFF" when none (the button then produces the
 /// fixed sample).
 class _AiBadge extends StatelessWidget {
@@ -584,9 +613,9 @@ const List<_Sponsor> _kSponsors = <_Sponsor>[
 ];
 
 /// Testing aid: upload a saved KOT/receipt photo and run it through the **real**
-/// scan flow (Gemini parse → review → add to the board, ad-hoc dishes and all).
+/// scan flow (Claude parse → review → add to the board, ad-hoc dishes and all).
 /// Opens the scan screen with the gallery picker already triggered — no camera
-/// needed, so it works on simulators/desktop. Needs a Gemini key + demo data.
+/// needed, so it works on simulators/desktop. Needs a Claude key + demo data.
 class _ScanTestCard extends StatelessWidget {
   const _ScanTestCard();
 
@@ -613,7 +642,7 @@ class _ScanTestCard extends StatelessWidget {
             const SizedBox(height: 4),
             const Text(
               'Drag & drop a saved KOT / receipt image onto a test page — for '
-              'desktop / macOS. Needs a Gemini key (above) and generated demo '
+              'desktop / macOS. Needs a Claude key (above) and generated demo '
               'data to match against.',
               style: TextStyle(color: Colors.white54, fontSize: 13),
             ),

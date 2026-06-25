@@ -94,6 +94,7 @@ class ScheduledMember extends Equatable {
     required this.table,
     required this.type,
     required this.qty,
+    this.note,
   });
 
   final String kotId;
@@ -101,8 +102,13 @@ class ScheduledMember extends Equatable {
   final KotType type;
   final int qty;
 
+  /// This ticket-line's special instruction (e.g. "less salt"), carried through
+  /// from [OrderLine.note] so the Stations board and fire alert can surface it.
+  /// Null/empty when there's nothing special.
+  final String? note;
+
   @override
-  List<Object?> get props => <Object?>[kotId, table, type, qty];
+  List<Object?> get props => <Object?>[kotId, table, type, qty, note];
 }
 
 /// Why a cook jumped the queue (TICKETS.md), surfaced to the kitchen views as a

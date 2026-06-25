@@ -49,8 +49,12 @@ class ScaffoldWithNavBar extends StatelessWidget {
       // Honour the user's configured hold time (Profile → Settings).
       duration: context.read<SettingsCubit>().state.fireToastDuration,
     );
-    // Fire-and-forget; the announcer swallows its own errors.
-    context.read<Announcer>().announce(batchSpokenText(alerts));
+    // Speak the alert only when audio is on (Profile → Settings). Muting keeps
+    // the toast above; it just silences the announcer. Fire-and-forget; the
+    // announcer swallows its own errors.
+    if (context.read<SettingsCubit>().state.announceEnabled) {
+      context.read<Announcer>().announce(batchSpokenText(alerts));
+    }
   }
 
   @override
@@ -75,12 +79,21 @@ class ScaffoldWithNavBar extends StatelessWidget {
           listener: (BuildContext context, FireAlertState state) =>
               _onFireAlerts(context, state.latest),
           child: Scaffold(
-            body: Column(
-              children: <Widget>[
-                // Run controls on the board tabs only (not Profile).
-                if (navigationShell.currentIndex < 3) const ServiceControlBar(),
-                Expanded(child: navigationShell),
-              ],
+            // Reserve the top inset (status bar: time/network) — the shell body
+            // has no AppBar of its own, so without this the ServiceControlBar
+            // (and the inner pages) would draw under it. `bottom: false` leaves
+            // the bottom inset to the NavigationBar. SafeArea also strips the
+            // consumed top padding for descendants, so the inner page AppBars
+            // don't double-pad.
+            body: SafeArea(
+              bottom: false,
+              child: Column(
+                children: <Widget>[
+                  // Run controls on the board tabs only (not Profile).
+                  if (navigationShell.currentIndex < 3) const ServiceControlBar(),
+                  Expanded(child: navigationShell),
+                ],
+              ),
             ),
             floatingActionButton: FloatingActionButton(
               onPressed: () => const ScanRoute().push<void>(context),

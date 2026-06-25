@@ -60,4 +60,6 @@ class OrderLines extends Table with SyncCols {
   IntColumn get recook => integer().withDefault(const Constant(0))();
   IntColumn get reAtMins => integer().nullable()();
   TextColumn get reason => text().nullable()();
+  // Free-text special instruction for the item (e.g. "less salt"). Schema v3.
+  TextColumn get note => text().nullable()();
 }

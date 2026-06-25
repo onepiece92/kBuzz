@@ -270,9 +270,9 @@
     "semantic_hash": "0ab99df6c717644a9e2f7cc478cf1325"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/app/di.dart": {
-    "mtime": 1782143235.9654531,
-    "ast_hash": "5c5439fb891e687a06a60391fcb53c49",
-    "semantic_hash": "5c5439fb891e687a06a60391fcb53c49"
+    "mtime": 1782362225.7130108,
+    "ast_hash": "817f87e93638b6a7cba6da9f7dcb24b5",
+    "semantic_hash": "817f87e93638b6a7cba6da9f7dcb24b5"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/app/router.dart": {
     "mtime": 1782045302.2634068,
@@ -320,69 +320,69 @@
     "semantic_hash": "7ed9f9b61923c7c15d8661536db550a9"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/data/ai/demo_data_generator.dart": {
-    "mtime": 1782143428.1483238,
-    "ast_hash": "15d876383330f52462c13f7d931e7d85",
-    "semantic_hash": "15d876383330f52462c13f7d931e7d85"
+    "mtime": 1782363686.7041004,
+    "ast_hash": "f0d02e53d536299c87b5c14ff8d9e932",
+    "semantic_hash": "f0d02e53d536299c87b5c14ff8d9e932"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/data/ai/ticket_scanner.dart": {
-    "mtime": 1782144339.301876,
-    "ast_hash": "9eaec60612700be61761f04bd91d17df",
-    "semantic_hash": "9eaec60612700be61761f04bd91d17df"
+    "mtime": 1782362291.7527852,
+    "ast_hash": "0c8c34230c860e7e36abefc10dccbbaf",
+    "semantic_hash": "0c8c34230c860e7e36abefc10dccbbaf"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/data/db/database.dart": {
-    "mtime": 1782118688.5511885,
-    "ast_hash": "54204f74ee4182209f1192502134b14f",
-    "semantic_hash": "54204f74ee4182209f1192502134b14f"
+    "mtime": 1782363566.492551,
+    "ast_hash": "6e92b4e030d556bcd0af166f8e0743a0",
+    "semantic_hash": "6e92b4e030d556bcd0af166f8e0743a0"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/data/db/tables.dart": {
-    "mtime": 1782118685.1527047,
-    "ast_hash": "1a52390a84d9e2179fd4afd45767b350",
-    "semantic_hash": "1a52390a84d9e2179fd4afd45767b350"
+    "mtime": 1782363555.297683,
+    "ast_hash": "b9d5e0b64958079940eec1c9ebbc56b9",
+    "semantic_hash": "b9d5e0b64958079940eec1c9ebbc56b9"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/data/demo/demo_data.dart": {
-    "mtime": 1782139975.3126645,
-    "ast_hash": "ba8bd9f08db540c79293e4822904d6e5",
-    "semantic_hash": "ba8bd9f08db540c79293e4822904d6e5"
+    "mtime": 1782363660.3805294,
+    "ast_hash": "c178b6636fb096deb8f103b5539ada43",
+    "semantic_hash": "c178b6636fb096deb8f103b5539ada43"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/data/repositories/kitchen_repository.dart": {
-    "mtime": 1782144459.525445,
-    "ast_hash": "a2c1c23633b1345dda0b02baf630c5bc",
-    "semantic_hash": "a2c1c23633b1345dda0b02baf630c5bc"
+    "mtime": 1782364184.3764775,
+    "ast_hash": "c394871c786d6986064ff0b66409bce0",
+    "semantic_hash": "c394871c786d6986064ff0b66409bce0"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/domain/entities/kitchen.dart": {
-    "mtime": 1782118378.1628022,
-    "ast_hash": "f8200a248791fcc5c1106cf82c0e16f3",
-    "semantic_hash": "f8200a248791fcc5c1106cf82c0e16f3"
+    "mtime": 1782364176.0660982,
+    "ast_hash": "43c4d37d31a826434fdc1a1dfe996f9c",
+    "semantic_hash": "43c4d37d31a826434fdc1a1dfe996f9c"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/domain/scheduler/models.dart": {
-    "mtime": 1782139076.641775,
-    "ast_hash": "700619397419540553dc2ccd57db98b6",
-    "semantic_hash": "700619397419540553dc2ccd57db98b6"
+    "mtime": 1782363540.7525892,
+    "ast_hash": "c5d022e4107b6cf2aa19abd7c6b7c0cb",
+    "semantic_hash": "c5d022e4107b6cf2aa19abd7c6b7c0cb"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/domain/scheduler/scheduler.dart": {
-    "mtime": 1782140130.907997,
-    "ast_hash": "ce8cfcf0117dd7be45ae67266066bfe5",
-    "semantic_hash": "ce8cfcf0117dd7be45ae67266066bfe5"
+    "mtime": 1782363547.335461,
+    "ast_hash": "050bf911ea4aa597094edadbdf47b9cc",
+    "semantic_hash": "050bf911ea4aa597094edadbdf47b9cc"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/board/board_data.dart": {
-    "mtime": 1782139139.0267904,
-    "ast_hash": "c8c4b6b204b47b9b8b70c559c407dae4",
-    "semantic_hash": "c8c4b6b204b47b9b8b70c559c407dae4"
+    "mtime": 1782317166.789907,
+    "ast_hash": "e8af7049f540d6a8b5bd3210a078447b",
+    "semantic_hash": "e8af7049f540d6a8b5bd3210a078447b"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/board/board_widgets.dart": {
-    "mtime": 1782141646.4160087,
-    "ast_hash": "fc91b5ca08ef3409276e1aed25faf819",
-    "semantic_hash": "fc91b5ca08ef3409276e1aed25faf819"
+    "mtime": 1782366574.199125,
+    "ast_hash": "c947cd3ab58fa110d5f8bb6a03aff882",
+    "semantic_hash": "c947cd3ab58fa110d5f8bb6a03aff882"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/profile/cubit/demo_data_cubit.dart": {
-    "mtime": 1782144435.930586,
-    "ast_hash": "dc973fde27d75d5c763794e9f94bfde0",
-    "semantic_hash": "dc973fde27d75d5c763794e9f94bfde0"
+    "mtime": 1782364193.5694277,
+    "ast_hash": "ca341548f24a973f4beba948d44cf9f3",
+    "semantic_hash": "ca341548f24a973f4beba948d44cf9f3"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/profile/profile_page.dart": {
-    "mtime": 1782145162.8619304,
-    "ast_hash": "61dec9121b7896c1573438da52e0fd4a",
-    "semantic_hash": "61dec9121b7896c1573438da52e0fd4a"
+    "mtime": 1782362485.0258152,
+    "ast_hash": "82379b1115628668f713d89756be9e0d",
+    "semantic_hash": "82379b1115628668f713d89756be9e0d"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/queue/queue_page.dart": {
     "mtime": 1782048259.7161875,
@@ -390,19 +390,19 @@
     "semantic_hash": "019e1b3d1e6d59e9b2111530432fcb1f"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/scan/scan_page.dart": {
-    "mtime": 1782144478.7049892,
-    "ast_hash": "27c6e60427e8f264b6a04ce9ef0b7fac",
-    "semantic_hash": "27c6e60427e8f264b6a04ce9ef0b7fac"
+    "mtime": 1782362510.1156507,
+    "ast_hash": "d16c21109a1f03759d09c9bb82011714",
+    "semantic_hash": "d16c21109a1f03759d09c9bb82011714"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/service/cubit/fire_alert_cubit.dart": {
-    "mtime": 1782144274.5244784,
-    "ast_hash": "59477b8d38183513d4581e6cdc58b1d8",
-    "semantic_hash": "59477b8d38183513d4581e6cdc58b1d8"
+    "mtime": 1782363801.964424,
+    "ast_hash": "47ff246a086f6903b4ddcac663b60b3d",
+    "semantic_hash": "47ff246a086f6903b4ddcac663b60b3d"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/service/cubit/service_clock_cubit.dart": {
-    "mtime": 1782136421.8209894,
-    "ast_hash": "9b74b2bcfd9c70a401305d9dc16b6a5b",
-    "semantic_hash": "9b74b2bcfd9c70a401305d9dc16b6a5b"
+    "mtime": 1782316627.3053677,
+    "ast_hash": "0e3a56b852bc99b9da6f6a2818ecf87c",
+    "semantic_hash": "0e3a56b852bc99b9da6f6a2818ecf87c"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/service/widgets/service_control_bar.dart": {
     "mtime": 1782046754.172727,
@@ -410,14 +410,14 @@
     "semantic_hash": "de2f80fee58e5a45012fb6629eef8317"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/stations/stations_page.dart": {
-    "mtime": 1782121827.8868577,
-    "ast_hash": "8e7dae3d6ba50756e3e55cdd05c91ddf",
-    "semantic_hash": "8e7dae3d6ba50756e3e55cdd05c91ddf"
+    "mtime": 1782365055.980743,
+    "ast_hash": "fe3a200ff591e734dd0370cb2cd6c811",
+    "semantic_hash": "fe3a200ff591e734dd0370cb2cd6c811"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/tickets/tickets_page.dart": {
-    "mtime": 1782138959.5396173,
-    "ast_hash": "d86326a4dbb3913bd707cb9b15642d3f",
-    "semantic_hash": "d86326a4dbb3913bd707cb9b15642d3f"
+    "mtime": 1782364614.4480472,
+    "ast_hash": "879de3bd797af395c6daef8912c28d96",
+    "semantic_hash": "879de3bd797af395c6daef8912c28d96"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/main.dart": {
     "mtime": 1782132462.431406,
@@ -425,24 +425,24 @@
     "semantic_hash": "cc2dbb070d8e70ec45b988356a6512a1"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/data/demo_data_generator_test.dart": {
-    "mtime": 1782051133.9730005,
-    "ast_hash": "134d233428dded93fa29526131127e5a",
-    "semantic_hash": "134d233428dded93fa29526131127e5a"
+    "mtime": 1782363960.9500203,
+    "ast_hash": "eccb8cadcb05e3f04ea99eb752092df2",
+    "semantic_hash": "eccb8cadcb05e3f04ea99eb752092df2"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/data/kitchen_repository_test.dart": {
-    "mtime": 1782144603.429688,
-    "ast_hash": "135e859fc75a8f68e5ee8e03719bf8da",
-    "semantic_hash": "135e859fc75a8f68e5ee8e03719bf8da"
+    "mtime": 1782363972.0741508,
+    "ast_hash": "c1acd2389948488db534c57ed4b077ca",
+    "semantic_hash": "c1acd2389948488db534c57ed4b077ca"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/data/ticket_scanner_test.dart": {
-    "mtime": 1782144564.0999503,
-    "ast_hash": "f4bdf2b0a620f7545b3e69616f5fe36f",
-    "semantic_hash": "f4bdf2b0a620f7545b3e69616f5fe36f"
+    "mtime": 1782362637.3866782,
+    "ast_hash": "d9b799aafa7c898f17e2aebec3386ca9",
+    "semantic_hash": "d9b799aafa7c898f17e2aebec3386ca9"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/demo_data_test.dart": {
-    "mtime": 1782052215.4552927,
-    "ast_hash": "b5fbaffba16f29799da1e90735d5b601",
-    "semantic_hash": "b5fbaffba16f29799da1e90735d5b601"
+    "mtime": 1782364299.6534653,
+    "ast_hash": "3534936273bdc5ee536b36029919e9fe",
+    "semantic_hash": "3534936273bdc5ee536b36029919e9fe"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/demo_flow_test.dart": {
     "mtime": 1782143688.7563086,
@@ -460,9 +460,9 @@
     "semantic_hash": "43563f975ffb848d51b22c07c5761f97"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/fire_alert_test.dart": {
-    "mtime": 1782144394.344689,
-    "ast_hash": "f021ef65c1d69506e8f631e02b5fce73",
-    "semantic_hash": "f021ef65c1d69506e8f631e02b5fce73"
+    "mtime": 1782364009.2783237,
+    "ast_hash": "4a23cce7ed5bb597d7ef6956336dd833",
+    "semantic_hash": "4a23cce7ed5bb597d7ef6956336dd833"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/scan_flow_test.dart": {
     "mtime": 1782140478.4771724,
@@ -485,9 +485,9 @@
     "semantic_hash": "57b59128f5643e94762a725ba3f25f9e"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/AGENTS.md": {
-    "mtime": 1782144680.9694567,
-    "ast_hash": "a255f70731a3e1d60356b19eaa5ebb8c",
-    "semantic_hash": "a255f70731a3e1d60356b19eaa5ebb8c"
+    "mtime": 1782364049.9975963,
+    "ast_hash": "0b7041e65b2e1209ad65c4697b4c6dce",
+    "semantic_hash": "0b7041e65b2e1209ad65c4697b4c6dce"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/core/announcer_test.dart": {
     "mtime": 1782130765.9002514,
@@ -500,9 +500,9 @@
     "semantic_hash": "f64680b1c67dee7adec838b0a66e3511"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/data/ticket_commands_test.dart": {
-    "mtime": 1782118875.083664,
-    "ast_hash": "05dca8f01933e64083e4a219cb4f477d",
-    "semantic_hash": "05dca8f01933e64083e4a219cb4f477d"
+    "mtime": 1782364263.249989,
+    "ast_hash": "ebd93c0ba5777c4c1a21f71d6ebb580c",
+    "semantic_hash": "ebd93c0ba5777c4c1a21f71d6ebb580c"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/domain/scheduler_tickets_test.dart": {
     "mtime": 1782140172.7793453,
@@ -525,9 +525,9 @@
     "semantic_hash": "6521503a35687295428220eb5c009689"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/TICKETS.md": {
-    "mtime": 1782140524.6584306,
-    "ast_hash": "2153dd7c2710bb6027fb80501e099338",
-    "semantic_hash": "2153dd7c2710bb6027fb80501e099338"
+    "mtime": 1782364379.8760304,
+    "ast_hash": "7c6c0c0f867a8f2c3f4c471a904948d8",
+    "semantic_hash": "7c6c0c0f867a8f2c3f4c471a904948d8"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/web/index.html": {
     "mtime": 1782119934.267765,
@@ -535,9 +535,9 @@
     "semantic_hash": "699d92c9cf34a9a20187a5047499899a"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/features/profile/cubit/settings_cubit.dart": {
-    "mtime": 1782142925.8717973,
-    "ast_hash": "abdc4bef03c0592fe6533acd9096ebe5",
-    "semantic_hash": "abdc4bef03c0592fe6533acd9096ebe5"
+    "mtime": 1782362207.5044987,
+    "ast_hash": "26604f5d4d0c3df680b29994193f2232",
+    "semantic_hash": "26604f5d4d0c3df680b29994193f2232"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/fire_toast_settings_e2e_test.dart": {
     "mtime": 1782140149.1023562,
@@ -545,9 +545,9 @@
     "semantic_hash": "0460eb040b41f9899fc6aa58e261ad74"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/settings_cubit_test.dart": {
-    "mtime": 1782143776.7384017,
-    "ast_hash": "30cbf82d079c06fce746404a4c864cfb",
-    "semantic_hash": "30cbf82d079c06fce746404a4c864cfb"
+    "mtime": 1782362602.8060513,
+    "ast_hash": "19688d45d2aa6c0dd5018ce499767acb",
+    "semantic_hash": "19688d45d2aa6c0dd5018ce499767acb"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/tickets_retain_test.dart": {
     "mtime": 1782141687.251764,
@@ -555,8 +555,38 @@
     "semantic_hash": "d71c0bf796e1569aa8a05c7a2cb3a521"
   },
   "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/profile_ai_badge_test.dart": {
-    "mtime": 1782145249.7298045,
-    "ast_hash": "6961d93a1351124621a71f3d006d0e35",
-    "semantic_hash": "6961d93a1351124621a71f3d006d0e35"
+    "mtime": 1782362587.4239194,
+    "ast_hash": "2416886284183463f8aceefc6e7d1d07",
+    "semantic_hash": "2416886284183463f8aceefc6e7d1d07"
+  },
+  "/Users/aashishbijukchhe/Documents/anti/kBuzz/.claude/settings.local.json": {
+    "mtime": 1782302033.287954,
+    "ast_hash": "43bdeb6bff008259d8b7dc23dcaca6e0",
+    "semantic_hash": "43bdeb6bff008259d8b7dc23dcaca6e0"
+  },
+  "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/core/format.dart": {
+    "mtime": 1782320644.9762135,
+    "ast_hash": "4c658b5e5929af417e7d43a22c94eb70",
+    "semantic_hash": "4c658b5e5929af417e7d43a22c94eb70"
+  },
+  "/Users/aashishbijukchhe/Documents/anti/kBuzz/lib/core/widgets/app_badge.dart": {
+    "mtime": 1782320636.9415526,
+    "ast_hash": "f0fe4d937f53959c18618a4355fedceb",
+    "semantic_hash": "f0fe4d937f53959c18618a4355fedceb"
+  },
+  "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/domain/notes_test.dart": {
+    "mtime": 1782363912.9815867,
+    "ast_hash": "57df5c076c9ab1cd4a54db07bf8d2fc9",
+    "semantic_hash": "57df5c076c9ab1cd4a54db07bf8d2fc9"
+  },
+  "/Users/aashishbijukchhe/Documents/anti/kBuzz/test/features/note_authoring_test.dart": {
+    "mtime": 1782364653.4213314,
+    "ast_hash": "d0f12974167ba30cfc0ec4b3cd75a74c",
+    "semantic_hash": "d0f12974167ba30cfc0ec4b3cd75a74c"
+  },
+  "/Users/aashishbijukchhe/Documents/anti/kBuzz/JOB_DESCRIPTION.md": {
+    "mtime": 1782362911.0262165,
+    "ast_hash": "a62c0da1d1a67006fb6b3aa8ed9083d2",
+    "semantic_hash": "a62c0da1d1a67006fb6b3aa8ed9083d2"
   }
 }

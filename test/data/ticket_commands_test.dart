@@ -87,6 +87,19 @@ void main() {
     }
   });
 
+  test('setLineNote sets, edits and clears a line note', () async {
+    final String id = (await repo.loadSnapshot()).kots.first.lines.first.id!;
+
+    await repo.setLineNote(id, 'no onions');
+    expect(lineById(await repo.loadSnapshot(), id).note, 'no onions');
+
+    await repo.setLineNote(id, 'extra spicy'); // edit
+    expect(lineById(await repo.loadSnapshot(), id).note, 'extra spicy');
+
+    await repo.setLineNote(id, null); // clear
+    expect(lineById(await repo.loadSnapshot(), id).note, isNull);
+  });
+
   test('rush toggles; done / reopen flip the ticket', () async {
     final String kotId = (await repo.loadSnapshot()).kots.first.id;
 

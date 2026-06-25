@@ -43,15 +43,16 @@ class ScannedLine {
   bool get isAdHoc => dishId == null;
 }
 
-/// Reads a photographed KOT into a [ScannedTicket] via Google Gemini **vision**
-/// (`generateContent` with an inline image part + JSON response mode), mapping
-/// items onto the supplied menu.
+/// Reads a photographed KOT into a [ScannedTicket] via Anthropic's **Claude**
+/// vision models (the Messages API with a base64 image block), mapping items
+/// onto the supplied menu.
 ///
-/// Mirrors [DemoDataGenerator]: raw HTTPS, `responseMimeType: application/json`
-/// so the reply is a JSON object we validate, the key from
-/// `--dart-define=GEMINI_API_KEY` (free tier at https://aistudio.google.com/apikey).
-/// Never throws across the boundary — every path returns a [Result] (§12); the
-/// scan screen falls back to manual entry on [Err].
+/// Mirrors [DemoDataGenerator]: raw HTTPS to `api.anthropic.com/v1/messages`,
+/// the system prompt pins a strict JSON shape that we validate, and the key
+/// comes from Profile → Settings (persisted) or `--dart-define=ANTHROPIC_API_KEY`
+/// (get one at https://console.anthropic.com/settings/keys). Never throws across
+/// the boundary — every path returns a [Result] (§12); the scan screen falls
+/// back to manual entry on [Err].
 class TicketScanner {
   /// Fixed-key scanner (tests / a known key).
   TicketScanner({
@@ -72,9 +73,9 @@ class TicketScanner {
   /// Builds a scanner from `--dart-define` values. [isConfigured] is false when
   /// no key was supplied, in which case the scan screen stays on manual entry.
   factory TicketScanner.fromEnvironment({http.Client? client}) {
-    const String key = String.fromEnvironment('GEMINI_API_KEY');
+    const String key = String.fromEnvironment('ANTHROPIC_API_KEY');
     const String model =
-        String.fromEnvironment('GEMINI_MODEL', defaultValue: _defaultModel);
+        String.fromEnvironment('ANTHROPIC_MODEL', defaultValue: _defaultModel);
     return TicketScanner(
       client: client ?? http.Client(),
       apiKey: key,
@@ -82,8 +83,10 @@ class TicketScanner {
     );
   }
 
-  static const String _defaultModel = 'gemini-2.0-flash';
-  static const String _host = 'generativelanguage.googleapis.com';
+  static const String _defaultModel = 'claude-opus-4-8';
+  static const String _host = 'api.anthropic.com';
+  static const String _apiVersion = '2023-06-01';
+  static const int _maxTokens = 4096;
   static const Logger _log = Logger('ticket-scan');
 
   final http.Client _client;
@@ -105,12 +108,15 @@ class TicketScanner {
   }) async {
     if (!isConfigured) {
       return const Result<ScannedTicket>.err(
-        NetworkFailure('No GEMINI_API_KEY configured.'),
+        NetworkFailure('No Anthropic API key configured.'),
       );
     }
-    if (menu.isEmpty) {
+    if (menu.isEmpty && stations.isEmpty) {
+      // Need somewhere to put the items: a menu to match against, or stations to
+      // assign off-menu (ad-hoc) items to (the no-data scan path passes the
+      // default station palette with an empty menu).
       return const Result<ScannedTicket>.err(
-        UnknownFailure('No menu to match the ticket against.'),
+        UnknownFailure('No menu or stations to read the ticket against.'),
       );
     }
 
@@ -118,24 +124,25 @@ class TicketScanner {
         menu.map((Dish d) => '${d.id} — ${d.name}').join('\n');
     final String stationList =
         stations.map((Station s) => '${s.id} — ${s.name}').join('\n');
-    final Uri uri = Uri.https(_host, '/v1beta/models/$model:generateContent');
+    final Uri uri = Uri.https(_host, '/v1/messages');
     final Map<String, Object?> body = <String, Object?>{
-      'systemInstruction': <String, Object?>{
-        'parts': <Map<String, Object?>>[
-          <String, Object?>{'text': _systemPrompt},
-        ],
-      },
-      'contents': <Map<String, Object?>>[
+      'model': model,
+      'max_tokens': _maxTokens,
+      'system': _systemPrompt,
+      'messages': <Map<String, Object?>>[
         <String, Object?>{
           'role': 'user',
-          'parts': <Map<String, Object?>>[
+          'content': <Map<String, Object?>>[
             <String, Object?>{
-              'inlineData': <String, Object?>{
-                'mimeType': mediaType,
+              'type': 'image',
+              'source': <String, Object?>{
+                'type': 'base64',
+                'media_type': mediaType,
                 'data': base64Encode(imageBytes),
               },
             },
             <String, Object?>{
+              'type': 'text',
               'text': 'Menu (id — name):\n$menuList\n\n'
                   'Stations (id — name):\n$stationList\n\n'
                   'Read the Kitchen Order Ticket in the image. Record its '
@@ -144,16 +151,12 @@ class TicketScanner {
                   'menu id. If it is NOT on the menu, leave "dishId" empty and '
                   'instead set "name" to the item text and "stationId" to the '
                   'most appropriate station id above. Always give "qty", and a '
-                  'whole-minute "cookMins" estimate when you can.',
+                  'whole-minute "cookMins" estimate when you can. '
+                  'Respond with only the JSON object.',
             },
           ],
         },
       ],
-      'generationConfig': <String, Object?>{
-        'responseMimeType': 'application/json',
-        // Low temperature: reading a ticket is extraction, not invention.
-        'temperature': 0.2,
-      },
     };
 
     http.Response res;
@@ -163,7 +166,8 @@ class TicketScanner {
             uri,
             headers: <String, String>{
               'content-type': 'application/json',
-              'x-goog-api-key': _apiKey(),
+              'x-api-key': _apiKey(),
+              'anthropic-version': _apiVersion,
             },
             body: jsonEncode(body),
           )
@@ -196,8 +200,8 @@ class TicketScanner {
   /// A short, plain-language message for a non-200 status. The full technical
   /// detail is logged — the user just needs to know what to do.
   String _statusMessage(int status) => switch (status) {
-        429 => 'AI hit its free usage limit. Try again later.',
-        500 || 503 => 'The AI service is busy right now.',
+        429 => 'AI hit its usage limit. Try again later.',
+        500 || 503 || 529 => 'The AI service is busy right now.',
         401 || 403 => 'AI key was not accepted — check it in Profile.',
         _ => 'Could not read the ticket.',
       };
@@ -207,31 +211,40 @@ class TicketScanner {
     required List<Dish> menu,
     required List<Station> stations,
   }) {
-    final Map<String, Object?> envelope =
-        jsonDecode(responseBody) as Map<String, Object?>;
-    final List<Object?> candidates =
-        (envelope['candidates'] as List<Object?>?) ?? const <Object?>[];
-    if (candidates.isEmpty) {
+    final Object? envelope = jsonDecode(responseBody);
+    if (envelope is! Map<String, Object?>) {
       return const Result<ScannedTicket>.err(
         UnknownFailure('Could not read the ticket.'),
       );
     }
-    final Map<String, Object?>? content =
-        (candidates.first as Map<String, Object?>?)?['content']
-            as Map<String, Object?>?;
-    final List<Object?> parts =
-        (content?['parts'] as List<Object?>?) ?? const <Object?>[];
-    final String? text = parts.isEmpty
-        ? null
-        : (parts.first as Map<String, Object?>?)?['text'] as String?;
+    final String? text = _firstText(envelope);
     if (text == null || text.trim().isEmpty) {
       return const Result<ScannedTicket>.err(
         UnknownFailure('Could not read the ticket.'),
       );
     }
-    final Map<String, Object?> root =
-        jsonDecode(_stripJsonFences(text)) as Map<String, Object?>;
+    final Object? root = jsonDecode(_stripJsonFences(text));
+    if (root is! Map<String, Object?>) {
+      return const Result<ScannedTicket>.err(
+        UnknownFailure('Could not read the ticket.'),
+      );
+    }
     return _build(root, menu: menu, stations: stations);
+  }
+
+  /// The first `text` block from a Claude Messages response `content` array.
+  /// Skips any non-text blocks (e.g. thinking) and returns null if there's none.
+  String? _firstText(Map<String, Object?> envelope) {
+    final List<Object?> content =
+        (envelope['content'] as List<Object?>?) ?? const <Object?>[];
+    for (final Object? block in content) {
+      if (block is Map<String, Object?> &&
+          block['type'] == 'text' &&
+          block['text'] is String) {
+        return block['text'] as String;
+      }
+    }
+    return null;
   }
 
   /// Validate the model's JSON into a [ScannedTicket]. Lines that match a menu id
@@ -258,7 +271,7 @@ class TicketScanner {
       }
       // Off-menu item: keep it as ad-hoc if it has a name (else there's nothing
       // to schedule). Validate the suggested station against the real list.
-      final String name = _str(l['name']);
+      final String name = _str(l['name'], maxLen: 80);
       if (name.isEmpty) continue;
       final String rawStation = _str(l['stationId']);
       lines.add(ScannedLine(
@@ -275,7 +288,7 @@ class TicketScanner {
     }
     return Result<ScannedTicket>.ok(
       ScannedTicket(
-        table: _str(root['table'], fallback: '1'),
+        table: _str(root['table'], fallback: '1', maxLen: 16),
         type: _parseType(root['type']),
         lines: lines,
       ),
@@ -294,8 +307,17 @@ class TicketScanner {
     return t.trim();
   }
 
-  String _str(Object? v, {String fallback = ''}) =>
-      v is String && v.trim().isNotEmpty ? v.trim() : fallback;
+  String _str(Object? v, {String fallback = '', int? maxLen}) {
+    if (v is! String) return fallback;
+    final String s = v.trim();
+    if (s.isEmpty) return fallback;
+    if (maxLen == null) return s;
+    // Clamp by code point (rune) so the cap never splits a surrogate pair into
+    // invalid UTF-16 — defends the UI/TTS against a pathological model response
+    // with an enormous name/table.
+    final List<int> runes = s.runes.toList();
+    return runes.length <= maxLen ? s : String.fromCharCodes(runes.take(maxLen));
+  }
 
   int _intOr(Object? v, {required int fallback, int? min}) {
     int out = switch (v) {

@@ -4,7 +4,7 @@
 > Also valid as `CLAUDE.md` / `.cursorrules` — rename or symlink as needed.
 
 kBuzz is an **offline-first** Kitchen Display System. A cook photographs a paper KOT
-(Kitchen Order Ticket); a **vision AI model** (Google **Gemini** today; provider-pluggable — §8) reads
+(Kitchen Order Ticket); a **vision AI model** (Anthropic **Claude** today; provider-pluggable — §8) reads
 it into line items and suggests a cook time per dish, then the app schedules **fire times across the
 whole kitchen** so that every dish on a ticket plates together — respecting each station's capacity,
 holdable-vs-not dishes, batching, per-ticket SLAs, and **just-in-time firing** so non-bottleneck dishes
@@ -59,10 +59,10 @@ this file wins on structure.
 | Backend / sync | Cloud Firestore + Firebase Auth | **None — no Firebase in the MVP** | Runs fully offline / local-only. `main.dart` does **no** Firebase init. Sync (§6/§11) is deferred. |
 | Local DB | Drift (SQLite) | **✅ wired** — local source of truth | `data/db/` (tables + `AppDatabase`) + `data/repositories/KitchenRepository`. The cubit writes through to Drift and hydrates on launch, so data survives restart. `data/demo/` is the deterministic seed. |
 | Models | freezed + json_serializable | **plain immutable classes + `equatable`** | No codegen for models yet; entities live in `domain/entities/`. |
-| Scan parse + cook-time | **Vision LLM** (Gemini, or Claude) | **✅ implemented** | `features/scan/` captures a photo **or uploads one from the gallery** (`image_picker`), and Profile has a **drag-and-drop** test page (`desktop_drop`, for desktop/macOS — `ScanPage(dropMode: true)`) that opens the same flow → `data/ai/TicketScanner` (**Google Gemini** vision, `gemini-2.0-flash`, structured JSON) reads it into a draft against the menu → review → add KOT. Key comes from **Profile → Settings (in-app, persisted)** or `--dart-define=GEMINI_API_KEY` (fallback); falls back to manual entry. Gemini returns `{dishId|name, stationId?, qty, cookMins?}`: matched items use the **AI cook-time** suggestion; **off-menu items become ad-hoc dishes** (suggested station) added to the menu so real tickets schedule (§8). A separate AI **demo-data generator** (`data/ai/`, Gemini **or** Anthropic) shares the same in-app key. |
+| Scan parse + cook-time | **Vision LLM** (Claude; provider-pluggable) | **✅ implemented** | `features/scan/` captures a photo **or uploads one from the gallery** (`image_picker`), and Profile has a **drag-and-drop** test page (`desktop_drop`, for desktop/macOS — `ScanPage(dropMode: true)`) that opens the same flow → `data/ai/TicketScanner` (**Anthropic Claude** vision, `claude-opus-4-8`, Messages API, JSON via the system prompt) reads it into a draft against the menu → review → add KOT. Key comes from **Profile → Settings (in-app, persisted)** or `--dart-define=ANTHROPIC_API_KEY` (fallback); falls back to manual entry. Claude returns `{dishId|name, stationId?, qty, cookMins?}`: matched items use the **AI cook-time** suggestion; **off-menu items become ad-hoc dishes** (suggested station) added to the menu so real tickets schedule (§8). A separate AI **demo-data generator** (`data/ai/`, Claude) shares the same in-app key. |
 | Scheduler | pure Dart scheduler (§10) | **✅ ported & tested + extended** | `domain/scheduler/` (`scheduler.dart` + `models.dart`), 1:1 from `MultiKOT.jsx`; golden (Node-captured) + invariant tests. **Extended** with waiter-driven inputs (served/void skip, `reAt` re-fire priority, `rush` SLA, `PriorityKind` badges) and opt-in **just-in-time firing** (`SchedulerConfig.justInTime`, on via `BoardData`). Golden stays pinned with `justInTime: false`. |
 | Waiter Tickets page | expo view (TICKETS.md) | **✅ implemented** | `features/tickets/` — tap a line → action sheet (serve / recook+reason / fire-now / void), footer (rush / serve-all / done+confirm). Drives a line/ticket state machine on Drift (write-through), reacts through the scheduler. **Strict coursing**: a line shows `held` until its whole ticket can plate. See `TICKETS.md`. |
-| Settings | Profile → Settings | **✅ partial** | `features/profile/cubit/settings_cubit.dart` — fire-toast hold-time presets **and the in-app Gemini API key** (`SettingsCubit`/`SettingsState`), persisted via **`shared_preferences`** (injected by `main`; session-only in tests). The key drives **both** scan + AI demo-data (read live in `app/di.dart` via `*.resolved(apiKey: …)`). Announce on/off toggle is still TODO (§10.5). |
+| Settings | Profile → Settings | **✅ partial** | `features/profile/cubit/settings_cubit.dart` — fire-toast hold-time presets **and the in-app Claude API key** (`SettingsCubit`/`SettingsState`), persisted via **`shared_preferences`** (injected by `main`; session-only in tests). The key drives **both** scan + AI demo-data (read live in `app/di.dart` via `*.resolved(apiKey: …)`). Also exposes a **"Read fires aloud" on/off toggle** (mutes the announcer, keeps the toast); only a volume control remains TODO (§10.5). |
 | Toasts | top toasts via `AppToast` | **✅ implemented** (`lib/core/widgets/app_toast.dart`) | Top-anchored overlay toast; never `SnackBar`. See §12. |
 | Fire alerts | bold toast + audio announce on "fire next" | **✅ implemented** | `FireAlertCubit` (`features/service/`) detects fire-next crossings off the clock+schedule; the nav shell presents `AppToast.fire` (bold top toast) + `Announcer.announce` (on-device TTS via `flutter_tts` + system chime). See §10.5. |
 
@@ -79,7 +79,9 @@ audioplayers, mocktail. Don't assume they're available — add (with justificati
 - `app/` — `app.dart` (`MaterialApp.router`), `router.dart` (+ generated `router.g.dart`), `di.dart`
   (`AppProviders`: bloc-based DI), `theme.dart`, `scaffold_with_nav_bar.dart`.
 - `core/` — `result.dart` (`Result<T>`/`AppFailure`), `clock.dart`, `logger.dart`,
-  `widgets/app_toast.dart` (top toast), `widgets/coming_soon.dart` (placeholder).
+  `announce/announcer.dart` (TTS + `SystemSound` chime seam), `widgets/app_toast.dart` (top toast),
+  `widgets/note_line.dart` (shared special-instruction line — Tickets/Stations/Fire-next),
+  `widgets/coming_soon.dart` (placeholder).
 - `domain/entities/kitchen.dart` — `Station`, `Dish`, `OrderLine`, `Kot`, `KotType` plus the waiter
   state-machine types `LineState` (open/served/void) and `TicketState` (active/done), as immutable
   `Equatable` classes in one file. (`Station.color` is an ARGB `int`, not a `Color`.) `OrderLine` carries
@@ -112,11 +114,11 @@ The Profile tab hosts the demo-data generator (`DemoDataCubit.generate/clear`, D
 | Routing            | **go_router** `^17.x` + go_router_builder | Typed routes, `StatefulShellRoute` for the tab bar |
 | Local DB (truth)   | **Drift** (SQLite)                       | Relational, reactive streams, testable migrations |
 | Backend / sync     | **Cloud Firestore** + Firebase Auth      | ⛔ **Post-MVP** — not in the build yet (see §0.5). Offline persistence on; mirror of Drift |
-| Scan parse + cook-time | **Vision LLM** — Google **Gemini** (`gemini-2.0-flash`) today, or Claude; `http` client | 🟡 **Built (direct HTTPS); proxy pending.** Gemini reads the KOT photo into structured lines (§8). The key is entered **in-app (Profile → Settings, persisted on-device)** or via `--dart-define` (fallback). Returns matched + **off-menu (ad-hoc)** lines with an **AI cook-time** estimate. ⚠️ Still client-side — the **backend proxy so the key never leaves the server is TODO** (§8). |
+| Scan parse + cook-time | **Vision LLM** — Anthropic **Claude** (`claude-opus-4-8`) today; provider-pluggable; `http` client | 🟡 **Built (direct HTTPS); proxy pending.** Claude reads the KOT photo into structured lines (§8). The key is entered **in-app (Profile → Settings, persisted on-device)** or via `--dart-define=ANTHROPIC_API_KEY` (fallback). Returns matched + **off-menu (ad-hoc)** lines with an **AI cook-time** estimate. ⚠️ Still client-side — the **backend proxy so the key never leaves the server is TODO** (§8). |
 | State management   | **bloc** (`flutter_bloc` + `Cubit`)      | Chosen over Riverpod. DI via `MultiRepositoryProvider`/`MultiBlocProvider`; state via `equatable` |
 | Models             | **equatable** (MVP) → freezed + json_serializable (later) | Immutable, value equality. freezed/json codegen lands with the data layer |
 | Connectivity       | connectivity_plus                        | Triggers sync; never gates writes |
-| Audio / announce   | **flutter_tts** (on-device TTS) + bundled chime (`audioplayers`) | Spoken "fire next" alert (§10.5). On-device only — must work offline. Add when building the alert. |
+| Audio / announce   | **flutter_tts** (on-device TTS) + platform alert sound (`SystemSound`) | ✅ Built (§10.5). Spoken "fire next" + a short system chime; on-device only (offline). **No** bundled asset / `audioplayers`. Mutable via Settings. |
 | IDs                | uuid (v7 preferred — time-sortable)      | Client-generated so offline rows have stable keys |
 
 Why these specifically:
@@ -141,13 +143,16 @@ dependencies:
   equatable: ^2.0.8
   uuid: ^4.5.3
   drift: ^2.34.0                # local source of truth (SQLite)
-  sqlite3_flutter_libs: ^0.5    # bundled sqlite
-  path: ^1.9                    # db path
-  path_provider: ^2.1           # app docs dir for the db file
+  sqlite3_flutter_libs: ^0.6.0+eol  # bundled sqlite
+  path: ^1.9.1                  # db path
+  path_provider: ^2.1.6         # app docs dir for the db file
   http: ^1.2.2                  # vision-LLM scan + AI demo generator (no proxy yet)
-  image_picker: ^1.2.2          # scan capture
+  image_picker: ^1.2.2          # scan capture (camera / gallery)
   flutter_tts: ^4.2.5           # fire-alert spoken announce (on-device)
-  shared_preferences: ^2.5.5    # settings persistence (fire-toast hold time)
+  shared_preferences: ^2.5.5    # settings persistence (fire-toast hold time, announce toggle, API key)
+  url_launcher: ^6.3.1          # API-key console + sponsor links
+  desktop_drop: ^0.7.1          # drag-and-drop scan test (desktop/macOS)
+  file_picker: ^11.0.2          # "choose a file" scan test (desktop/macOS)
 
 dev_dependencies:
   flutter_test: { sdk: flutter }
@@ -165,7 +170,7 @@ dev_dependencies:
 # milestone 3 (freezed models, if adopted):
 #   freezed, freezed_annotation, json_annotation, json_serializable
 # milestone 4 (live run — fire alerts, §10.5):
-#   flutter_tts (on-device TTS), audioplayers (bundled chime asset)
+#   flutter_tts (on-device TTS)   # chime uses SystemSound — no bundled asset / audioplayers needed
 # milestone 5 (AI scan — vision LLM via backend proxy, §8):
 #   dio (or http), image_picker (or camera)   # no retrofit needed for one endpoint
 # milestone 6 (sync + Firebase):
@@ -226,8 +231,9 @@ lib/
     result.dart             # Result<T>/AppFailure (no throwing across layers)
     clock.dart              # Clock abstraction (inject into scheduler/sync; never call now() directly)
     logger.dart
-    announce/announcer.dart # Announcer abstraction (SystemAnnouncer = on-device TTS + chime; NoopAnnouncer) — §10.5
+    announce/announcer.dart # Announcer abstraction (SystemAnnouncer = on-device TTS + SystemSound chime; NoopAnnouncer) — §10.5
     widgets/app_toast.dart  # top toast; AppToast.show/success/error/failure + AppToast.fire (bold fire alert, §10.5/§12)
+    widgets/note_line.dart  # shared special-instruction line (sticky-note glyph + note) — Tickets/Stations/Fire-next
   domain/
     entities/               # Kot, OrderLine, Dish, Station, ScheduledDish ...
     scheduler/
@@ -277,9 +283,11 @@ Mirror the prototype. Core entities are immutable `Equatable` classes in `domain
 - **Station** `{ id, name, color, capacity }` — capacity = how many dishes can cook concurrently.
 - **Dish** (menu item) `{ id, name, emoji, stationId, cookMins, holdable, batchable }`.
   `cookMins` is the *predicted* default; a ticket line may override it.
-- **OrderLine** `{ id?, dishId, qty, cookOverrideMins?, state, recook, reAt?, reason? }` —
+- **OrderLine** `{ id?, dishId, qty, cookOverrideMins?, state, recook, reAt?, reason?, note? }` —
   `state: LineState` (open/served/void, waiter-driven); `recook` count; `reAt` = the minute it was
-  re-fired (recook or fire-now → priority); `reason` = recook reason. (TICKETS.md §"Data model".)
+  re-fired (recook or fire-now → priority); `reason` = recook reason; `note` = free-text special
+  instruction (e.g. "less salt"), shown on the Tickets + Stations boards and **read aloud with the
+  fire alert** (carried through onto `ScheduledMember.note`). (TICKETS.md §"Data model".)
 - **Kot** `{ id, table, type (dineIn|takeaway|delivery), orderedAt, lines[], status, rush }` —
   `status: TicketState` (active/done); `rush` tightens the SLA + prioritises every line.
 - **ScheduledDish** (scheduler output) `{ stationId, name, emoji, cookMins, holdable, members[],
@@ -364,14 +372,15 @@ periodic. Everything debounced.
 
 ## 8. AI scan layer — vision LLM reads the KOT + suggests cook times
 
-> 🟡 **Partly built.** The scan flow is **implemented today against Google Gemini** (`gemini-2.0-flash`,
-> `data/ai/TicketScanner`) — capture → vision read → review → add KOT, with manual fallback. It returns
-> matched menu items **and off-menu (ad-hoc) items** (with a suggested station, turned into menu dishes on
-> add) plus a **per-item cook-time estimate** (advisory; editable on review, falls back to the dish
-> default). What's **still the plan**: routing the call through a **backend proxy** so the key never ships
-> (it's client-side now). This section also **replaces** the earlier self-hosted GLM-OCR + retrofit
-> design. The request shapes below show Claude; the wired client uses Gemini's equivalent
-> (`responseSchema`) — same idea.
+> 🟡 **Partly built.** The scan flow is **implemented today against Anthropic Claude** (`claude-opus-4-8`,
+> `data/ai/TicketScanner`, the Messages API) — capture → vision read → review → add KOT, with manual
+> fallback. It returns matched menu items **and off-menu (ad-hoc) items** (with a suggested station, turned
+> into menu dishes on add) plus a **per-item cook-time estimate** (advisory; editable on review, falls back
+> to the dish default). What's **still the plan**: routing the call through a **backend proxy** so the key
+> never ships (it's client-side now). This section also **replaces** the earlier self-hosted GLM-OCR +
+> retrofit design. The wired client uses the request shape below directly; today it pins JSON via the
+> system prompt rather than `output_config` (the lenient parser tolerates fences) — switching to
+> structured outputs is a drop-in upgrade.
 
 A **single vision-capable LLM call** does both jobs: read the photographed KOT into structured lines
 (item name + qty) **and** suggest a cook time per item. One multimodal request, one parseable JSON
@@ -381,14 +390,14 @@ response — no separate OCR and predict services.
 
 | Provider | Model id | Notes |
 |----------|----------|-------|
-| **Gemini (wired today)** | `gemini-2.0-flash` | What `TicketScanner` uses now: vision + structured JSON via `responseSchema`, no-cost tier. Good default while validating. |
-| **Claude (quality option)** | `claude-sonnet-4-6` | Vision + structured JSON; `$3 / $15` per 1M tok, ~1.6K tok/image. Swap in for hardest scans (`claude-opus-4-8`) or cheapest (`claude-haiku-4-5`). Use the latest Claude vision model. |
+| **Claude (wired today)** | `claude-opus-4-8` | What `TicketScanner` / `DemoDataGenerator` use now: vision + JSON via the Messages API. Override per build with `--dart-define=ANTHROPIC_MODEL=…`. No free tier — every scan/generate costs. |
+| **Claude (cost option)** | `claude-haiku-4-5` / `claude-sonnet-4-6` | Cheaper/faster for high-volume KDS use (Haiku `$1 / $5`, Sonnet `$3 / $15` per 1M tok). Set via `ANTHROPIC_MODEL`. |
 
 > 🔑 **The provider API key must NEVER ship in the Flutter app.** Mobile binaries are trivially
 > unpacked; an embedded key is a leaked key. **Route the call through a thin backend proxy** (the
 > chessdream.app infra) that holds the key server-side. The app calls *your* proxy endpoint, not
-> `api.anthropic.com` / Gemini directly. The proxy can also switch providers (Claude ↔ Gemini) and
-> rotate keys without an app release. Dev points at the dev proxy, prod at the prod proxy — never
+> `api.anthropic.com` directly. The proxy can also switch providers and rotate keys without an app
+> release. Dev points at the dev proxy, prod at the prod proxy — never
 > hardcode URLs in feature code; pass the base URL via `--dart-define` per flavor.
 
 **Request shape (what the proxy forwards to the vision model — Claude Messages API):**
@@ -423,9 +432,9 @@ response — no separate OCR and predict services.
 }
 ```
 
-The first text block of the response is valid JSON matching that schema. (Gemini: same idea via its
-structured-output / `responseSchema` parameter.) Image goes in a content block **before** the text;
-base64 must be newline-free.
+The first text block of the response is the JSON. With `output_config` it's schema-validated; the
+wired client instead pins the shape in the system prompt and parses leniently (fence-tolerant). Image
+goes in a content block **before** the text; base64 must be newline-free.
 
 **Client (Flutter) side — `data/remote/api/`:**
 
@@ -444,8 +453,11 @@ base64 must be newline-free.
 - Cook-time suggestions are **advisory**. Missing/failed → fall back to `Dish.cookMins` (and any line
   override). The cook can always correct the time on the review screen, and that correction — not the
   model's guess — is what feeds the scheduler (§10).
-- Treat model output as untrusted: validate `qty`/`cookMins` ranges and map unknown item names to the
-  closest menu `Dish` (or flag for manual pick) before creating the KOT.
+- Treat model output as untrusted: validate `qty`/`cookMins` ranges, **length-cap free-text fields**
+  (name/note/emoji/table — clamped by code point so an emoji never splits into invalid UTF-16),
+  **reject a response whose JSON isn't the expected object** (return a clean typed `Result.err`, not a
+  thrown cast), and map unknown item names to the closest menu `Dish` (or flag for manual pick) before
+  creating the KOT.
 
 ---
 
@@ -585,20 +597,22 @@ behind an abstraction provided in DI (`MultiRepositoryProvider`, alongside `Cloc
 
 ```dart
 abstract class Announcer { Future<void> announce(String text); Future<void> chime(); }
-class SystemAnnouncer implements Announcer { /* on-device TTS (flutter_tts) + bundled chime asset */ }
+class SystemAnnouncer implements Announcer { /* on-device TTS (flutter_tts) + SystemSound chime */ }
 class NoopAnnouncer  implements Announcer { /* tests / CI / muted — does nothing */ }
 ```
 
 - **On-device only — offline (§0.1).** Use `flutter_tts` (platform TTS engine, works with no network)
-  and a **bundled chime asset** (`audioplayers`/`just_audio`). **Do not** call a cloud TTS API — the
-  kitchen wifi *will* drop mid-rush, and the announce must still fire.
+  and the **platform alert sound** (`SystemSound.play(SystemSoundType.alert)`) for the chime — no
+  bundled asset / `audioplayers` needed. **Do not** call a cloud TTS API — the kitchen wifi *will*
+  drop mid-rush, and the announce must still fire.
 - **Combine / de-dupe simultaneous fires.** ✅ Implemented: dishes that cross `fireAt` on the same tick
   are emitted as one batch; the shell shows a single `AppToast.fire(items: …)` and speaks one combined
   line via `batchSpokenText(...)` ("Fire Grill — 2 Cheeseburger, and Steam — 1 …, and N more") rather
   than overlapping toasts or talking over the TTS. Never silently drop an alert.
 - **Settings (Profile tab):** ✅ `SettingsCubit` exposes the **fire-toast hold time** (presets
-  `kFireToastPresets`, default 3 min), persisted via `shared_preferences` and passed to `AppToast.fire`.
-  _Still TODO:_ an announce on/off toggle + volume (on by default; mute kills audio, keeps the toast).
+  `kFireToastPresets`, default 3 min) **and a "Read fires aloud" on/off toggle** (`announceEnabled`,
+  on by default; muting silences the `Announcer` but keeps the toast — gated in the shell's
+  `_onFireAlerts`), both persisted via `shared_preferences`. _Still TODO:_ a volume control.
 
 **Why this shape:** the scheduler stays pure; detection is unit-testable (feed `elapsed` values, assert the
 emitted alerts and once-only behaviour); audio is mockable (`NoopAnnouncer` in widget/unit tests — no real
@@ -648,7 +662,9 @@ TTS in CI); and the alert is visible from every tab because it lives at the shel
   and CTA/selected accents (it replaces the prototype's `#f97316`). Brand secondary `#274074` (navy)
   is for branded chrome — app bar, sign-in screen, elevated/light surfaces — **not** for text or fills
   on the near-black board (contrast too low there). Keep the **functional station colors** (grill red,
-  steam blue, wok amber, …) exactly as the prototype; they encode station, not brand. Monospace for all
+  steam blue, wok amber, …) exactly as the prototype; they encode station, not brand. The **expo status
+  palette** (`kStatusReady`/`kStatusHeld`/`kStatusLate`/`kStatusFiring`) also lives in `theme.dart` —
+  reference these named constants, not raw hex, for ticket plate-state colours. Monospace for all
   times/clocks/quantities. Match the prototype's UX copy.
 
 ---
@@ -675,7 +691,7 @@ flutter run                                                 # MVP: no flavors/Fi
 ### Testing priorities (in order)
 1. **Scheduler** — exhaustive unit tests (the invariants in §10, the prototype's sample rush as a
    golden case, edge cases: empty, single dish, all-same-station, impossible SLA, capacity 1).
-2. **Sync engine** — outbox drain, idempotent re-push, LWW conflict, tombstone propagation, offline→online.
+2. **Sync engine** *(post-MVP — not built yet; §0.5 / §15.7)* — outbox drain, idempotent re-push, LWW conflict, tombstone propagation, offline→online.
 3. **Repositories** — against an in-memory Drift db (`NativeDatabase.memory()`), with mocked remote.
 4. Widget tests for the three boards + scan/review flow. Golden tests optional.
 
@@ -723,13 +739,13 @@ Use `mocktail`. Core logic (scheduler + sync) should sit near 100% line coverage
    live `ServiceClockCubit` + speed control animate them; **fire alerts** fire (`AppToast.fire` +
    on-device announce via `Announcer`, §10.5). _Remaining refinement:_ a reactive Drift-stream
    `ScheduleCubit` (boards currently read the Drift-backed `DemoDataCubit` snapshot).
-5. ✅ Scan flow: `image_picker` camera → **Gemini vision** (`TicketScanner`, §8) reads the KOT into a
+5. ✅ Scan flow: `image_picker` camera → **Claude vision** (`TicketScanner`, §8) reads the KOT into a
    draft (matched + **off-menu ad-hoc** items, with **AI cook-time** suggestions) → review screen
    (editable) → create KOT (ad-hoc dishes join the menu). _Remaining:_ key-holding **backend proxy** (§8).
 6. ✅ Waiter **Tickets** page (TICKETS.md): line/ticket state machine on Drift (serve / recook+reason /
    fire-now / void / rush / serve-all / done+reopen), `PriorityKind` kitchen badges, **strict coursing**
    (`held` status), and **just-in-time firing** in the scheduler. _Remaining:_ emit sync events per
-   action (lands with milestone 7); announce on/off setting.
+   action (lands with milestone 7).
 7. Sync engine: outbox push + delta pull + LWW; Firebase + Firestore rules + indexes (first Firebase milestone).
 8. Auth gate + flavors + polish.
 
@@ -737,7 +753,7 @@ Use `mocktail`. Core logic (scheduler + sync) should sit near 100% line coverage
 
 ## 16. Architecture map — god nodes (from graphify)
 
-> Generated by `/gods` over `graphify-out/graph.json` (1143 nodes, 1699 edges, 51 communities; 2026-06-22).
+> Generated by `/gods` over `graphify-out/graph.json` (1254 nodes, 1853 edges, 81 communities; 2026-06-25).
 > The **god nodes** are the most-connected nodes — the core abstractions to orient by. Degree here is
 > dominated by **file** nodes (each links all its symbols + imports), so read it as "biggest, most-wired
 > files." Regenerate with `/graphify --update` then `/gods` after large structural changes; treat this
@@ -745,15 +761,17 @@ Use `mocktail`. Core logic (scheduler + sync) should sit near 100% line coverage
 
 | # | Node | Degree | What it is |
 |---|------|--------|-----------|
-| 1 | `scan_page.dart` | 69 | Scan capture → review → add-KOT flow (largest screen). |
-| 2 | `stations_page.dart` | 69 | Station rail — lane-packed live Gantt. |
-| 3 | `tickets_page.dart` | 63 | **Waiter expo** — line state machine, action sheet, strict coursing (TICKETS.md). |
-| 4 | `demo_data_cubit.dart` | 62 | Drift-backed demo state + all waiter commands (serve/recook/rush/…). |
-| 5 | `scheduler.dart` | 61 | Pure `schedule()` — placement, batching, priority, just-in-time firing (§10). |
-| 6 | `demo_data_generator.dart` | 59 | AI demo-data generator (Gemini **or** Anthropic). |
-| 7 | `app_toast.dart` | 58 | **Top toast** — the single transient-message API + `AppToast.fire` (§12). |
-| 8 | `models.dart` | 57 | Scheduler value types — `ScheduledDish`, `SlaConfig`, `SchedulerConfig`, `PriorityKind`. |
-| 9 | `fire_alert_cubit.dart` | 42 | Fire-next detector + `batchSpokenText` (§10.5). |
+| 1 | `scan_page.dart` | 86 | Scan capture → review → add-KOT flow (largest screen). |
+| 2 | `tickets_page.dart` | 73 | **Waiter expo** — line state machine, action sheet, strict coursing (TICKETS.md). |
+| 3 | `stations_page.dart` | 70 | Station rail — lane-packed live Gantt. |
+| 4 | `demo_data_cubit.dart` | 63 | Drift-backed demo state + all waiter commands (serve/recook/rush/note/…). |
+| 5 | `profile_page.dart` | 63 | Profile cards — settings (fire-toast hold + **read-fires-aloud** toggle), API key, demo-data, scan test. |
+| 6 | `scheduler.dart` | 61 | Pure `schedule()` — placement, batching, priority, just-in-time firing (§10). |
+| 7 | `app_toast.dart` | 59 | **Top toast** — the single transient-message API + `AppToast.fire` (§12). |
+| 8 | `demo_data_generator.dart` | 59 | AI demo-data generator (Anthropic Claude). |
+| 9 | `models.dart` | 58 | Scheduler value types — `ScheduledDish`, `SlaConfig`, `SchedulerConfig`, `PriorityKind`. |
+| 10 | `ticket_scanner.dart` | 49 | Claude vision scan client — KOT photo → structured lines (§8). |
+| 11 | `fire_alert_cubit.dart` | 46 | Fire-next detector + `batchSpokenText` (§10.5). |
 
 By symbol (not file), the most-connected abstractions are `ServiceClockCubit` (the live-clock spine every
 board subscribes to), `DemoDataCubit`, `AppProviders`/`di.dart`, `SettingsCubit`, and the pure

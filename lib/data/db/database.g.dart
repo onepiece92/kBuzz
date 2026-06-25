@@ -1904,6 +1904,15 @@ class $OrderLinesTable extends OrderLines
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1919,6 +1928,7 @@ class $OrderLinesTable extends OrderLines
     recook,
     reAtMins,
     reason,
+    note,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2018,6 +2028,12 @@ class $OrderLinesTable extends OrderLines
         reason.isAcceptableOrUnknown(data['reason']!, _reasonMeta),
       );
     }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
     return context;
   }
 
@@ -2079,6 +2095,10 @@ class $OrderLinesTable extends OrderLines
         DriftSqlType.string,
         data['${effectivePrefix}reason'],
       ),
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
     );
   }
 
@@ -2102,6 +2122,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
   final int recook;
   final int? reAtMins;
   final String? reason;
+  final String? note;
   const OrderLineRow({
     required this.id,
     required this.updatedAt,
@@ -2116,6 +2137,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
     required this.recook,
     this.reAtMins,
     this.reason,
+    this.note,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2138,6 +2160,9 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
     }
     if (!nullToAbsent || reason != null) {
       map['reason'] = Variable<String>(reason);
+    }
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
     }
     return map;
   }
@@ -2163,6 +2188,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
       reason: reason == null && nullToAbsent
           ? const Value.absent()
           : Value(reason),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
     );
   }
 
@@ -2185,6 +2211,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
       recook: serializer.fromJson<int>(json['recook']),
       reAtMins: serializer.fromJson<int?>(json['reAtMins']),
       reason: serializer.fromJson<String?>(json['reason']),
+      note: serializer.fromJson<String?>(json['note']),
     );
   }
   @override
@@ -2204,6 +2231,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
       'recook': serializer.toJson<int>(recook),
       'reAtMins': serializer.toJson<int?>(reAtMins),
       'reason': serializer.toJson<String?>(reason),
+      'note': serializer.toJson<String?>(note),
     };
   }
 
@@ -2221,6 +2249,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
     int? recook,
     Value<int?> reAtMins = const Value.absent(),
     Value<String?> reason = const Value.absent(),
+    Value<String?> note = const Value.absent(),
   }) => OrderLineRow(
     id: id ?? this.id,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -2237,6 +2266,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
     recook: recook ?? this.recook,
     reAtMins: reAtMins.present ? reAtMins.value : this.reAtMins,
     reason: reason.present ? reason.value : this.reason,
+    note: note.present ? note.value : this.note,
   );
   OrderLineRow copyWithCompanion(OrderLinesCompanion data) {
     return OrderLineRow(
@@ -2255,6 +2285,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
       recook: data.recook.present ? data.recook.value : this.recook,
       reAtMins: data.reAtMins.present ? data.reAtMins.value : this.reAtMins,
       reason: data.reason.present ? data.reason.value : this.reason,
+      note: data.note.present ? data.note.value : this.note,
     );
   }
 
@@ -2273,7 +2304,8 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
           ..write('state: $state, ')
           ..write('recook: $recook, ')
           ..write('reAtMins: $reAtMins, ')
-          ..write('reason: $reason')
+          ..write('reason: $reason, ')
+          ..write('note: $note')
           ..write(')'))
         .toString();
   }
@@ -2293,6 +2325,7 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
     recook,
     reAtMins,
     reason,
+    note,
   );
   @override
   bool operator ==(Object other) =>
@@ -2310,7 +2343,8 @@ class OrderLineRow extends DataClass implements Insertable<OrderLineRow> {
           other.state == this.state &&
           other.recook == this.recook &&
           other.reAtMins == this.reAtMins &&
-          other.reason == this.reason);
+          other.reason == this.reason &&
+          other.note == this.note);
 }
 
 class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
@@ -2327,6 +2361,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
   final Value<int> recook;
   final Value<int?> reAtMins;
   final Value<String?> reason;
+  final Value<String?> note;
   final Value<int> rowid;
   const OrderLinesCompanion({
     this.id = const Value.absent(),
@@ -2342,6 +2377,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
     this.recook = const Value.absent(),
     this.reAtMins = const Value.absent(),
     this.reason = const Value.absent(),
+    this.note = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OrderLinesCompanion.insert({
@@ -2358,6 +2394,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
     this.recook = const Value.absent(),
     this.reAtMins = const Value.absent(),
     this.reason = const Value.absent(),
+    this.note = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        kotId = Value(kotId),
@@ -2377,6 +2414,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
     Expression<int>? recook,
     Expression<int>? reAtMins,
     Expression<String>? reason,
+    Expression<String>? note,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2393,6 +2431,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
       if (recook != null) 'recook': recook,
       if (reAtMins != null) 're_at_mins': reAtMins,
       if (reason != null) 'reason': reason,
+      if (note != null) 'note': note,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2411,6 +2450,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
     Value<int>? recook,
     Value<int?>? reAtMins,
     Value<String?>? reason,
+    Value<String?>? note,
     Value<int>? rowid,
   }) {
     return OrderLinesCompanion(
@@ -2427,6 +2467,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
       recook: recook ?? this.recook,
       reAtMins: reAtMins ?? this.reAtMins,
       reason: reason ?? this.reason,
+      note: note ?? this.note,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2473,6 +2514,9 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
     if (reason.present) {
       map['reason'] = Variable<String>(reason.value);
     }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2495,6 +2539,7 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
           ..write('recook: $recook, ')
           ..write('reAtMins: $reAtMins, ')
           ..write('reason: $reason, ')
+          ..write('note: $note, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3392,6 +3437,7 @@ typedef $$OrderLinesTableCreateCompanionBuilder =
       Value<int> recook,
       Value<int?> reAtMins,
       Value<String?> reason,
+      Value<String?> note,
       Value<int> rowid,
     });
 typedef $$OrderLinesTableUpdateCompanionBuilder =
@@ -3409,6 +3455,7 @@ typedef $$OrderLinesTableUpdateCompanionBuilder =
       Value<int> recook,
       Value<int?> reAtMins,
       Value<String?> reason,
+      Value<String?> note,
       Value<int> rowid,
     });
 
@@ -3483,6 +3530,11 @@ class $$OrderLinesTableFilterComposer
 
   ColumnFilters<String> get reason => $composableBuilder(
     column: $table.reason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3560,6 +3612,11 @@ class $$OrderLinesTableOrderingComposer
     column: $table.reason,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OrderLinesTableAnnotationComposer
@@ -3611,6 +3668,9 @@ class $$OrderLinesTableAnnotationComposer
 
   GeneratedColumn<String> get reason =>
       $composableBuilder(column: $table.reason, builder: (column) => column);
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
 }
 
 class $$OrderLinesTableTableManager
@@ -3657,6 +3717,7 @@ class $$OrderLinesTableTableManager
                 Value<int> recook = const Value.absent(),
                 Value<int?> reAtMins = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
+                Value<String?> note = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderLinesCompanion(
                 id: id,
@@ -3672,6 +3733,7 @@ class $$OrderLinesTableTableManager
                 recook: recook,
                 reAtMins: reAtMins,
                 reason: reason,
+                note: note,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3689,6 +3751,7 @@ class $$OrderLinesTableTableManager
                 Value<int> recook = const Value.absent(),
                 Value<int?> reAtMins = const Value.absent(),
                 Value<String?> reason = const Value.absent(),
+                Value<String?> note = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OrderLinesCompanion.insert(
                 id: id,
@@ -3704,6 +3767,7 @@ class $$OrderLinesTableTableManager
                 recook: recook,
                 reAtMins: reAtMins,
                 reason: reason,
+                note: note,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

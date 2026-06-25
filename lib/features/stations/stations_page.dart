@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kbuzz/app/theme.dart';
 import 'package:kbuzz/core/format.dart';
 import 'package:kbuzz/core/widgets/app_badge.dart';
+import 'package:kbuzz/core/widgets/note_line.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
@@ -293,8 +294,10 @@ class _StationTimeline extends StatelessWidget {
     required this.onTap,
   });
 
-  static const double laneHeight = 30;
-  static const double barHeight = 24;
+  // Taller than a single text line so a bar can show the dish name with its
+  // special-instruction note underneath (notes-less bars just center the name).
+  static const double laneHeight = 40;
+  static const double barHeight = 34;
   static const double minBarWidth = 46;
 
   final List<ScheduledDish> dishes;
@@ -427,35 +430,7 @@ class _DishBar extends StatelessWidget {
           children: <Widget>[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: ClipRect(
-                child: OverflowBox(
-                  alignment: Alignment.centerLeft,
-                  maxWidth: double.infinity,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      Text(dish.emoji, style: const TextStyle(fontSize: 11)),
-                      const SizedBox(width: 3),
-                      Text(
-                        dish.qty > 1 ? '${dish.name} ×${dish.qty}' : dish.name,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (status == DishLiveStatus.cooking) ...<Widget>[
-                        const SizedBox(width: 4),
-                        const Icon(Icons.local_fire_department,
-                            size: 11, color: Colors.white),
-                      ] else if (status == DishLiveStatus.ready) ...<Widget>[
-                        const SizedBox(width: 4),
-                        const Icon(Icons.check, size: 11, color: Colors.white),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
+              child: _DishBarLabel(dish: dish, status: status),
             ),
             if (holding)
               Positioned(
@@ -463,6 +438,72 @@ class _DishBar extends StatelessWidget {
                 bottom: 0,
                 right: 0,
                 child: Container(width: 3, color: const Color(0xFFFDE68A)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The label inside a [_DishBar]: emoji + name (+qty), a live cooking/ready
+/// glyph, and the optional special-instruction line. Overflows left so a long
+/// name/note never widens the time-scaled bar.
+class _DishBarLabel extends StatelessWidget {
+  const _DishBarLabel({required this.dish, required this.status});
+
+  final ScheduledDish dish;
+  final DishLiveStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    // Distinct notes across the tickets this (possibly batched) cook serves.
+    final List<String> notes = <String>[
+      for (final ScheduledMember m in dish.members)
+        if ((m.note ?? '').trim().isNotEmpty) m.note!.trim(),
+    ];
+    final String? noteText = notes.isEmpty ? null : notes.toSet().join('; ');
+    return ClipRect(
+      child: OverflowBox(
+        alignment: Alignment.centerLeft,
+        maxWidth: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(dish.emoji, style: const TextStyle(fontSize: 11)),
+                const SizedBox(width: 3),
+                Text(
+                  dish.qty > 1 ? '${dish.name} ×${dish.qty}' : dish.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (status == DishLiveStatus.cooking) ...<Widget>[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.local_fire_department,
+                      size: 11, color: Colors.white),
+                ] else if (status == DishLiveStatus.ready) ...<Widget>[
+                  const SizedBox(width: 4),
+                  const Icon(Icons.check, size: 11, color: Colors.white),
+                ],
+              ],
+            ),
+            if (noteText != null)
+              NoteLine(
+                noteText,
+                color: Colors.white,
+                iconColor: Colors.white70,
+                fontSize: 9,
+                iconSize: 9,
+                fontWeight: FontWeight.w500,
+                topPadding: 1,
+                flexible: false,
               ),
           ],
         ),
@@ -619,6 +660,7 @@ class _DetailCard extends StatelessWidget {
                 Pill(_tableCode(m) + (m.qty > 1 ? ' ×${m.qty}' : '')),
             ],
           ),
+          _MemberNotes(members: dish.members),
           const SizedBox(height: 12),
           Row(
             children: <Widget>[
@@ -638,6 +680,60 @@ class _DetailCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Per-table special instructions for a (possibly batched) cook — one
+/// "{table} {note}" row per member that carries a note. Renders nothing when no
+/// member has one.
+class _MemberNotes extends StatelessWidget {
+  const _MemberNotes({required this.members});
+
+  final List<ScheduledMember> members;
+
+  @override
+  Widget build(BuildContext context) {
+    final List<ScheduledMember> noted = <ScheduledMember>[
+      for (final ScheduledMember m in members)
+        if ((m.note ?? '').trim().isNotEmpty) m,
+    ];
+    if (noted.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        const SizedBox(height: 10),
+        for (final ScheduledMember m in noted)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                const Icon(Icons.sticky_note_2_outlined,
+                    size: 14, color: kStatusHeld),
+                const SizedBox(width: 6),
+                Text(
+                  '${_tableCode(m)} ',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    m.note!.trim(),
+                    style: const TextStyle(
+                      color: kStatusHeld,
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

@@ -17,6 +17,7 @@ class FireAlert extends Equatable {
     required this.dishName,
     required this.qty,
     this.emoji,
+    this.notes = const <String>[],
   });
 
   final String stationId;
@@ -25,12 +26,24 @@ class FireAlert extends Equatable {
   final int qty;
   final String? emoji;
 
-  /// What the [Announcer] speaks, e.g. "Fire Grill — 2 Cheeseburger".
-  String get spokenText => 'Fire $stationName — $qty $dishName';
+  /// Special instructions on this cook's lines (e.g. "no salt", "extra spicy"),
+  /// deduped across the tickets it serves. Read aloud after the dish.
+  final List<String> notes;
+
+  /// The dish part of the announcement, e.g. "Grill — 2 Cheeseburger, note: no
+  /// salt". Used standalone ([spokenText]) and inside a batch ([batchSpokenText]).
+  String get spokenDish {
+    final String base = '$stationName — $qty $dishName';
+    return notes.isEmpty ? base : '$base, note: ${notes.join('; ')}';
+  }
+
+  /// What the [Announcer] speaks, e.g. "Fire Grill — 2 Cheeseburger, note: no
+  /// salt".
+  String get spokenText => 'Fire $spokenDish';
 
   @override
   List<Object?> get props =>
-      <Object?>[stationId, stationName, dishName, qty, emoji];
+      <Object?>[stationId, stationName, dishName, qty, emoji, notes];
 }
 
 /// One spoken line covering a whole batch of fires that crossed on the same
@@ -42,9 +55,8 @@ class FireAlert extends Equatable {
 String batchSpokenText(List<FireAlert> alerts) {
   if (alerts.isEmpty) return '';
   if (alerts.length == 1) return alerts.single.spokenText;
-  final List<String> parts = alerts
-      .map((FireAlert a) => '${a.stationName} — ${a.qty} ${a.dishName}')
-      .toList();
+  final List<String> parts =
+      alerts.map((FireAlert a) => a.spokenDish).toList();
   final String last = parts.removeLast();
   return 'Fire ${parts.join(', ')}, and $last';
 }
@@ -128,12 +140,19 @@ List<FireAlert> detectFires({
     if (elapsedMins >= d.fireAt && alerted.add(fireKey(d))) {
       final String key = '${d.stationId}|${d.dishId}';
       final FireAlert? prev = byDish[key];
+      // Union this cook's line notes into the alert (deduped, order-preserving).
+      final List<String> notes = <String>[...?prev?.notes];
+      for (final ScheduledMember m in d.members) {
+        final String n = (m.note ?? '').trim();
+        if (n.isNotEmpty && !notes.contains(n)) notes.add(n);
+      }
       byDish[key] = FireAlert(
         stationId: d.stationId,
         stationName: stationsById[d.stationId]?.name ?? d.stationId,
         dishName: d.name,
         qty: (prev?.qty ?? 0) + d.qty,
         emoji: prev?.emoji ?? d.emoji,
+        notes: notes,
       );
     }
   }
@@ -161,6 +180,7 @@ class FireAlertCubit extends Cubit<FireAlertState> {
   StreamSubscription<ServiceClockState>? _clockSub;
 
   void _applyData(DemoDataState state) {
+    if (isClosed) return;
     final DemoData? data = state.data;
     final DateTime? now = state.generatedAt;
     if (data == null || now == null) {
@@ -175,6 +195,7 @@ class FireAlertCubit extends Cubit<FireAlertState> {
   }
 
   void _onClock(ServiceClockState clock) {
+    if (isClosed) return;
     final List<FireAlert> fired = detectFires(
       dishes: _dishes,
       stationsById: _stationsById,

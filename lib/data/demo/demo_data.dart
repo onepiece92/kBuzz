@@ -34,11 +34,13 @@ DemoData buildDemoData({required DateTime now}) {
   final Map<String, Dish> byName = <String, Dish>{
     for (final Dish d in menu) d.name: d,
   };
-  OrderLine line(String name, int qty) =>
-      OrderLine(dishId: byName[name]!.id, qty: qty);
+  OrderLine line(String name, int qty, {String? note}) =>
+      OrderLine(dishId: byName[name]!.id, qty: qty, note: note);
   DateTime orderedAt(int min) => now.add(Duration(minutes: min));
 
-  // orderMin is minutes relative to "now" (negative = ordered earlier).
+  // orderMin is minutes relative to "now" (negative = ordered earlier). A few
+  // lines carry a special instruction so the note feature is visible in the
+  // fixed sample (shown on the boards + read aloud on fire).
   final List<Kot> kots = <Kot>[
     Kot(
       id: 'demo-kot-1',
@@ -46,9 +48,9 @@ DemoData buildDemoData({required DateTime now}) {
       type: KotType.dineIn,
       orderedAt: orderedAt(-2),
       lines: <OrderLine>[
-        line('BBQ Ribs', 1),
+        line('BBQ Ribs', 1, note: 'extra sauce'),
         line('Steamed Mussels', 2),
-        line('French Fries', 1),
+        line('French Fries', 1, note: 'no salt'),
       ],
     ),
     Kot(
@@ -57,9 +59,9 @@ DemoData buildDemoData({required DateTime now}) {
       type: KotType.dineIn,
       orderedAt: orderedAt(-1),
       lines: <OrderLine>[
-        line('Chicken Stir-Fry', 1),
+        line('Chicken Stir-Fry', 1, note: 'extra spicy'),
         line('Steamed Clams', 1),
-        line('Caesar Salad', 1),
+        line('Caesar Salad', 1, note: 'dressing on the side'),
       ],
     ),
     Kot(
@@ -79,7 +81,7 @@ DemoData buildDemoData({required DateTime now}) {
       type: KotType.delivery,
       orderedAt: orderedAt(0),
       lines: <OrderLine>[
-        line('Cheeseburger', 1),
+        line('Cheeseburger', 1, note: 'no pickles, add bacon'),
         line('French Fries', 1),
       ],
     ),
@@ -112,8 +114,16 @@ DemoData buildRandomDemoData({required DateTime now, Random? random}) {
     final List<Dish> pool = List<Dish>.of(menu)..shuffle(rng);
     final List<OrderLine> lines = <OrderLine>[
       for (final Dish d in pool.take(lineCount))
-        // Mostly 1, occasionally 2 — keeps the rush believable.
-        OrderLine(dishId: d.id, qty: rng.nextInt(4) == 0 ? 2 : 1),
+        OrderLine(
+          dishId: d.id,
+          // Mostly 1, occasionally 2 — keeps the rush believable.
+          qty: rng.nextInt(4) == 0 ? 2 : 1,
+          // ~1 in 3 items gets a special instruction so the note feature shows
+          // up without an AI key.
+          note: rng.nextInt(3) == 0
+              ? _demoNotes[rng.nextInt(_demoNotes.length)]
+              : null,
+        ),
     ];
     kots.add(Kot(
       id: 'demo-kot-${i + 1}',
@@ -127,6 +137,21 @@ DemoData buildRandomDemoData({required DateTime now, Random? random}) {
   return DemoData(stations: stations, menu: menu, kots: kots);
 }
 
+/// Curated special instructions sprinkled onto the random rush so the note
+/// feature is visible on the boards (and read aloud on fire) without an AI key.
+const List<String> _demoNotes = <String>[
+  'no salt',
+  'extra spicy',
+  'well done',
+  'no onions',
+  'gluten-free',
+  'add extra cheese',
+  'sauce on the side',
+  'allergy: nuts',
+  'make it crispy',
+  'kids portion',
+];
+
 /// A plausible table / order code for [type] (delivery codes carry a `D`
 /// prefix, matching the prototype's stored labels).
 String _randomTable(KotType type, Random rng) {
@@ -138,6 +163,13 @@ String _randomTable(KotType type, Random rng) {
       return '${1 + rng.nextInt(20)}'; // 1..20
   }
 }
+
+/// The default station palette for scanning with **no demo data** yet — the AI
+/// maps each scanned item onto one of these, and the scan bootstraps a board
+/// from the subset it actually uses (see the scan flow). Same fixed kitchen
+/// lines (ids/colours/capacities) as [buildDemoData], so a scanned-from-scratch
+/// board behaves identically to a generated one.
+List<Station> defaultStations() => _demoStations();
 
 /// The fixed kitchen line — American station names. The ids/colours/capacities
 /// are stable (the boards, scheduler and persistence key on the id), so only the

@@ -36,19 +36,13 @@ const List<Station> _stations = <Station>[
 
 final Uint8List _image = Uint8List.fromList(<int>[1, 2, 3, 4]);
 
-/// A Gemini generateContent envelope wrapping [ticket] as the model's JSON reply.
-String _geminiResponse(Map<String, Object?> ticket) =>
+/// A Claude Messages envelope wrapping [ticket] as the model's JSON reply.
+String _claudeResponse(Map<String, Object?> ticket) =>
     jsonEncode(<String, Object?>{
-      'candidates': <Map<String, Object?>>[
-        <String, Object?>{
-          'content': <String, Object?>{
-            'role': 'model',
-            'parts': <Map<String, Object?>>[
-              <String, Object?>{'text': jsonEncode(ticket)},
-            ],
-          },
-          'finishReason': 'STOP',
-        },
+      'role': 'assistant',
+      'stop_reason': 'end_turn',
+      'content': <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': jsonEncode(ticket)},
       ],
     });
 
@@ -80,7 +74,7 @@ void main() {
     expect(called, isFalse);
   });
 
-  test('empty menu → Err', () async {
+  test('empty menu AND no stations → Err', () async {
     final TicketScanner scanner = _scanner(
       MockClient((http.Request _) async => _resp('{}')),
     );
@@ -92,13 +86,46 @@ void main() {
     expect(r.isOk, isFalse);
   });
 
-  test('maps the Gemini reply into a ticket; drops unknown dish ids', () async {
+  test('empty menu but stations given → every item is ad-hoc (no-data scan)',
+      () async {
+    final TicketScanner scanner = _scanner(MockClient((http.Request _) async {
+      return _resp(_claudeResponse(<String, Object?>{
+        'table': '7',
+        'type': 'dineIn',
+        'lines': <Map<String, Object?>>[
+          <String, Object?>{
+            'name': 'Mystery Stew',
+            'stationId': 'fry',
+            'qty': 2,
+            'cookMins': 9,
+          },
+        ],
+      }));
+    }));
+    final Result<ScannedTicket> r = await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: const <Dish>[], // nothing to match against …
+      stations: _stations, // … but stations to assign ad-hoc items to
+    );
+    final ScannedTicket t = r.when(
+      ok: (ScannedTicket x) => x,
+      err: (AppFailure f) => fail(f.message),
+    );
+    expect(t.lines, hasLength(1));
+    expect(t.lines.single.isAdHoc, isTrue);
+    expect(t.lines.single.dishId, isNull);
+    expect(t.lines.single.name, 'Mystery Stew');
+    expect(t.lines.single.stationId, 'fry');
+  });
+
+  test('maps the Claude reply into a ticket; drops unknown dish ids', () async {
     // Capture the request and assert on it AFTER (asserting inside the mock
     // would be swallowed by the scanner's error handling).
     http.Request? captured;
     final MockClient client = MockClient((http.Request req) async {
       captured = req;
-      return _resp(_geminiResponse(<String, Object?>{
+      return _resp(_claudeResponse(<String, Object?>{
         'table': 'D21',
         'type': 'delivery',
         'lines': <Map<String, Object?>>[
@@ -123,28 +150,26 @@ void main() {
     expect(ticket.lines.first.qty, 2);
     expect(ticket.lines.last.dishId, 'fries');
 
-    // The request hit Gemini's vision endpoint with the key + inline image.
+    // The request hit Claude's Messages endpoint with the key + image block.
     expect(captured, isNotNull);
-    expect(captured!.url.toString(), contains(':generateContent'));
-    expect(captured!.headers['x-goog-api-key'], 'test-key');
+    expect(captured!.url.toString(), contains('/v1/messages'));
+    expect(captured!.headers['x-api-key'], 'test-key');
+    expect(captured!.headers['anthropic-version'], isNotEmpty);
     final Map<String, Object?> body =
         jsonDecode(captured!.body) as Map<String, Object?>;
-    final List<Object?> parts = ((body['contents']! as List<Object?>).first
-        as Map<String, Object?>)['parts']! as List<Object?>;
+    expect(body['model'], isNotNull);
+    final List<Object?> content = ((body['messages']! as List<Object?>).first
+        as Map<String, Object?>)['content']! as List<Object?>;
     expect(
-      parts.any((Object? p) =>
-          p is Map<String, Object?> && p.containsKey('inlineData')),
+      content.any((Object? c) =>
+          c is Map<String, Object?> && c['type'] == 'image'),
       isTrue,
-    );
-    expect(
-      (body['generationConfig']! as Map<String, Object?>)['responseMimeType'],
-      'application/json',
     );
   });
 
   test('keeps off-menu items as ad-hoc lines and parses cookMins', () async {
     final MockClient client = MockClient((http.Request _) async {
-      return _resp(_geminiResponse(<String, Object?>{
+      return _resp(_claudeResponse(<String, Object?>{
         'table': '7',
         'type': 'dineIn',
         'lines': <Map<String, Object?>>[
@@ -193,7 +218,7 @@ void main() {
 
   test('no recognizable lines → Err', () async {
     final TicketScanner scanner = _scanner(MockClient((http.Request _) async {
-      return _resp(_geminiResponse(<String, Object?>{
+      return _resp(_claudeResponse(<String, Object?>{
         'table': '5',
         'type': 'dineIn',
         'lines': <Map<String, Object?>>[
@@ -219,5 +244,115 @@ void main() {
       menu: _menu,
     );
     expect(r.isOk, isFalse);
+  });
+
+  test('401 → Err pointing the user at the key', () async {
+    final TicketScanner scanner = _scanner(MockClient((http.Request _) async {
+      return _resp('{"error":{"message":"invalid x-api-key"}}', 401);
+    }));
+    final Result<ScannedTicket> r = await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+    );
+    r.when(
+      ok: (_) => fail('a 401 must not produce a ticket'),
+      err: (AppFailure f) => expect(f.message.toLowerCase(), contains('key')),
+    );
+  });
+
+  test('network exception → Err (no crash escapes scan)', () async {
+    final TicketScanner scanner = _scanner(MockClient((http.Request _) async {
+      throw Exception('connection reset');
+    }));
+    final Result<ScannedTicket> r = await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+    );
+    expect(r.isOk, isFalse);
+  });
+
+  test('non-JSON body → Err (not a thrown FormatException)', () async {
+    final TicketScanner scanner = _scanner(
+      MockClient((http.Request _) async => _resp('totally not json')),
+    );
+    final Result<ScannedTicket> r = await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+    );
+    expect(r.isOk, isFalse);
+  });
+
+  test('envelope decodes to a JSON array, not an object → Err (shape guard)',
+      () async {
+    final TicketScanner scanner =
+        _scanner(MockClient((http.Request _) async => _resp('[1, 2, 3]')));
+    final Result<ScannedTicket> r = await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+    );
+    expect(r.isOk, isFalse);
+  });
+
+  test('model text decodes to a list, not an object → Err (inner shape guard)',
+      () async {
+    // A valid Claude envelope whose text block is a JSON array rather than the
+    // expected ticket object — the inner `is! Map` guard must catch it cleanly.
+    final String envelope = jsonEncode(<String, Object?>{
+      'content': <Map<String, Object?>>[
+        <String, Object?>{'type': 'text', 'text': '[1, 2, 3]'},
+      ],
+    });
+    final TicketScanner scanner =
+        _scanner(MockClient((http.Request _) async => _resp(envelope)));
+    final Result<ScannedTicket> r = await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+    );
+    expect(r.isOk, isFalse);
+  });
+
+  test('caps an over-long ad-hoc line name at 80 chars', () async {
+    final String longName = 'A' * 200;
+    final TicketScanner scanner = _scanner(MockClient((http.Request _) async {
+      return _resp(_claudeResponse(<String, Object?>{
+        'table': '5',
+        'type': 'dineIn',
+        'lines': <Map<String, Object?>>[
+          <String, Object?>{'name': longName, 'stationId': 'fry', 'qty': 1},
+        ],
+      }));
+    }));
+    final ScannedTicket t = (await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+      stations: _stations,
+    ))
+        .when(ok: (ScannedTicket x) => x, err: (AppFailure f) => fail(f.message));
+    expect(t.lines.single.name, hasLength(80));
+  });
+
+  test('caps an over-long table label at 16 chars', () async {
+    final TicketScanner scanner = _scanner(MockClient((http.Request _) async {
+      return _resp(_claudeResponse(<String, Object?>{
+        'table': 'T' * 50,
+        'type': 'dineIn',
+        'lines': <Map<String, Object?>>[
+          <String, Object?>{'dishId': 'burger', 'qty': 1},
+        ],
+      }));
+    }));
+    final ScannedTicket t = (await scanner.scan(
+      imageBytes: _image,
+      mediaType: 'image/jpeg',
+      menu: _menu,
+    ))
+        .when(ok: (ScannedTicket x) => x, err: (AppFailure f) => fail(f.message));
+    expect(t.table, hasLength(16));
   });
 }

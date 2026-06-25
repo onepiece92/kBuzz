@@ -6,20 +6,20 @@ import 'package:kbuzz/core/result.dart';
 import 'package:kbuzz/data/demo/demo_data.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 
-/// Generates a *fresh* demo dataset on every call by asking Google Gemini to
-/// invent a plausible restaurant: stations, a themed menu and a live ticket
+/// Generates a *fresh* demo dataset on every call by asking Anthropic's Claude
+/// to invent a plausible restaurant: stations, a themed menu and a live ticket
 /// rush. Replaces the deterministic [buildDemoData] when an API key is wired up.
 ///
-/// Gemini is used because Google AI Studio offers a free tier — get a key at
-/// https://aistudio.google.com/apikey and pass it at build time via
-/// `--dart-define=GEMINI_API_KEY=...` (see [DemoDataGenerator.fromEnvironment]).
+/// Get a key at https://console.anthropic.com/settings/keys and enter it in
+/// Profile → Settings (persisted), or pass it at build time via
+/// `--dart-define=ANTHROPIC_API_KEY=...` (see [DemoDataGenerator.fromEnvironment]).
 /// Without a key [isConfigured] is false and the cubit keeps using the sample.
 ///
-/// Flutter has no official Gemini SDK, so this talks to the Generative Language
-/// REST API (`models/{model}:generateContent`) over raw HTTPS via `package:http`,
-/// asking for `responseMimeType: application/json` so the reply is a JSON object
-/// we validate. Never throws across the layer boundary: every path returns a
-/// [Result] (AGENTS.md §12); the cubit falls back to [buildDemoData] on [Err].
+/// Flutter has no official Anthropic SDK, so this talks to the Messages API
+/// (`/v1/messages`) over raw HTTPS via `package:http`; the system prompt pins a
+/// strict JSON shape so the reply is a JSON object we validate. Never throws
+/// across the layer boundary: every path returns a [Result] (AGENTS.md §12); the
+/// cubit falls back to [buildDemoData] on [Err].
 class DemoDataGenerator {
   /// Fixed-key generator (tests / a known key).
   DemoDataGenerator({
@@ -38,11 +38,11 @@ class DemoDataGenerator {
   });
 
   /// Builds a generator from `--dart-define` values. [isConfigured] is false
-  /// when no `GEMINI_API_KEY` was supplied.
+  /// when no `ANTHROPIC_API_KEY` was supplied.
   factory DemoDataGenerator.fromEnvironment({http.Client? client}) {
-    const String key = String.fromEnvironment('GEMINI_API_KEY');
+    const String key = String.fromEnvironment('ANTHROPIC_API_KEY');
     const String model =
-        String.fromEnvironment('GEMINI_MODEL', defaultValue: _defaultModel);
+        String.fromEnvironment('ANTHROPIC_MODEL', defaultValue: _defaultModel);
     return DemoDataGenerator(
       client: client ?? http.Client(),
       apiKey: key,
@@ -50,9 +50,12 @@ class DemoDataGenerator {
     );
   }
 
-  /// Fast, capable, free-tier-eligible default. Override with `GEMINI_MODEL`.
-  static const String _defaultModel = 'gemini-2.0-flash';
-  static const String _host = 'generativelanguage.googleapis.com';
+  /// Default Claude model. Override with `--dart-define=ANTHROPIC_MODEL=…`
+  /// (e.g. `claude-haiku-4-5` for a cheaper, faster generator).
+  static const String _defaultModel = 'claude-opus-4-8';
+  static const String _host = 'api.anthropic.com';
+  static const String _apiVersion = '2023-06-01';
+  static const int _maxTokens = 8192;
   static const Logger _log = Logger('demo-gen');
 
   final http.Client _client;
@@ -63,36 +66,24 @@ class DemoDataGenerator {
   bool get isConfigured => _apiKey().isNotEmpty;
 
   /// Short provider name for the UI.
-  String get providerLabel => 'Gemini';
+  String get providerLabel => 'Claude';
 
-  /// Ask Gemini for a brand-new dataset, anchored to [now].
+  /// Ask Claude for a brand-new dataset, anchored to [now].
   Future<Result<DemoData>> generate({required DateTime now}) async {
     if (!isConfigured) {
       return const Result<DemoData>.err(
-        NetworkFailure('No GEMINI_API_KEY configured.'),
+        NetworkFailure('No Anthropic API key configured.'),
       );
     }
 
-    final Uri uri = Uri.https(_host, '/v1beta/models/$model:generateContent');
+    final Uri uri = Uri.https(_host, '/v1/messages');
     final Map<String, Object?> body = <String, Object?>{
-      'systemInstruction': <String, Object?>{
-        'parts': <Map<String, Object?>>[
-          <String, Object?>{'text': _systemPrompt},
-        ],
-      },
-      'contents': <Map<String, Object?>>[
-        <String, Object?>{
-          'role': 'user',
-          'parts': <Map<String, Object?>>[
-            <String, Object?>{'text': _userPrompt},
-          ],
-        },
+      'model': model,
+      'max_tokens': _maxTokens,
+      'system': _systemPrompt,
+      'messages': <Map<String, Object?>>[
+        <String, Object?>{'role': 'user', 'content': _userPrompt},
       ],
-      'generationConfig': <String, Object?>{
-        'responseMimeType': 'application/json',
-        // High temperature so each tap yields a noticeably different rush.
-        'temperature': 1.2,
-      },
     };
 
     http.Response res;
@@ -102,13 +93,14 @@ class DemoDataGenerator {
             uri,
             headers: <String, String>{
               'content-type': 'application/json',
-              'x-goog-api-key': _apiKey(),
+              'x-api-key': _apiKey(),
+              'anthropic-version': _apiVersion,
             },
             body: jsonEncode(body),
           )
           .timeout(const Duration(seconds: 60));
     } on Object catch (e, st) {
-      _log.error('gemini request failed', error: e, stackTrace: st);
+      _log.error('claude request failed', error: e, stackTrace: st);
       return Result<DemoData>.err(
         NetworkFailure('Could not reach the AI service.', cause: e),
       );
@@ -116,38 +108,32 @@ class DemoDataGenerator {
 
     if (res.statusCode != 200) {
       final String detail = _errorMessageFrom(_bodyAsUtf8(res));
-      _log.error('gemini HTTP ${res.statusCode}: $detail');
+      _log.error('claude HTTP ${res.statusCode}: $detail');
       return Result<DemoData>.err(NetworkFailure(_statusMessage(res.statusCode)));
     }
 
     try {
-      final Map<String, Object?> envelope =
-          jsonDecode(_bodyAsUtf8(res)) as Map<String, Object?>;
-      final List<Object?> candidates =
-          (envelope['candidates'] as List<Object?>?) ?? const <Object?>[];
-      if (candidates.isEmpty) {
+      final Object? envelope = jsonDecode(_bodyAsUtf8(res));
+      if (envelope is! Map<String, Object?>) {
         return const Result<DemoData>.err(
           UnknownFailure('The AI did not return usable data.'),
         );
       }
-      final Map<String, Object?>? content =
-          (candidates.first as Map<String, Object?>?)?['content']
-              as Map<String, Object?>?;
-      final List<Object?> parts =
-          (content?['parts'] as List<Object?>?) ?? const <Object?>[];
-      final String? text = parts.isEmpty
-          ? null
-          : (parts.first as Map<String, Object?>?)?['text'] as String?;
+      final String? text = _firstText(envelope);
       if (text == null || text.trim().isEmpty) {
         return const Result<DemoData>.err(
           UnknownFailure('The AI did not return usable data.'),
         );
       }
-      final Map<String, Object?> root =
-          jsonDecode(_stripJsonFences(text)) as Map<String, Object?>;
+      final Object? root = jsonDecode(_stripJsonFences(text));
+      if (root is! Map<String, Object?>) {
+        return const Result<DemoData>.err(
+          UnknownFailure('The AI did not return usable data.'),
+        );
+      }
       return _validateDataset(root, now: now);
     } on Object catch (e, st) {
-      _log.error('gemini parse failed', error: e, stackTrace: st);
+      _log.error('claude parse failed', error: e, stackTrace: st);
       return Result<DemoData>.err(
         UnknownFailure('The AI did not return usable data.', cause: e),
       );
@@ -157,18 +143,33 @@ class DemoDataGenerator {
   /// A short, plain-language message for a non-200 status. The full technical
   /// detail is logged (above) — the user just needs to know what to do.
   String _statusMessage(int status) => switch (status) {
-        429 => 'AI hit its free usage limit. Try again later.',
-        500 || 503 => 'The AI service is busy right now.',
+        429 => 'AI hit its usage limit. Try again later.',
+        500 || 503 || 529 => 'The AI service is busy right now.',
         401 || 403 => 'AI key was not accepted — check it in Profile.',
         _ => 'The AI service had a problem.',
       };
+}
+
+/// The first `text` block from a Claude Messages response `content` array.
+/// Skips any non-text blocks (e.g. thinking) and returns null if there's none.
+String? _firstText(Map<String, Object?> envelope) {
+  final List<Object?> content =
+      (envelope['content'] as List<Object?>?) ?? const <Object?>[];
+  for (final Object? block in content) {
+    if (block is Map<String, Object?> &&
+        block['type'] == 'text' &&
+        block['text'] is String) {
+      return block['text'] as String;
+    }
+  }
+  return null;
 }
 
 /* ================================================================== */
 /*  Validation + helpers                                              */
 /* ================================================================== */
 
-/// Map + validate Gemini's JSON into domain entities, dropping anything that
+/// Map + validate the model's JSON into domain entities, dropping anything that
 /// would break the scheduler (dishes on unknown stations, lines on unknown
 /// dishes, empty tickets) rather than failing the whole batch.
 Result<DemoData> _validateDataset(
@@ -188,7 +189,7 @@ Result<DemoData> _validateDataset(
   for (final Object? s in rawStations) {
     if (s is! Map<String, Object?>) continue;
     final String id = _str(s['id']);
-    final String name = _str(s['name']);
+    final String name = _str(s['name'], maxLen: 40);
     if (id.isEmpty || name.isEmpty || !stationIds.add(id)) continue;
     stations.add(Station(
       id: id,
@@ -217,8 +218,8 @@ Result<DemoData> _validateDataset(
     dishIds.add(id);
     menu.add(Dish(
       id: id,
-      name: _str(m['name'], fallback: id),
-      emoji: _str(m['emoji'], fallback: '🍽️'),
+      name: _str(m['name'], fallback: id, maxLen: 80),
+      emoji: _str(m['emoji'], fallback: '🍽️', maxLen: 8),
       stationId: stationId,
       cookMins: _intOr(m['cookMins'], fallback: 8, min: 1),
       holdable: m['holdable'] == true,
@@ -243,15 +244,20 @@ Result<DemoData> _validateDataset(
       if (l is! Map<String, Object?>) continue;
       final String dishId = _str(l['dishId']);
       if (!dishIds.contains(dishId)) continue;
+      final String note = _str(l['note'], maxLen: 80);
       lines.add(
-        OrderLine(dishId: dishId, qty: _intOr(l['qty'], fallback: 1, min: 1)),
+        OrderLine(
+          dishId: dishId,
+          qty: _intOr(l['qty'], fallback: 1, min: 1),
+          note: note.isEmpty ? null : note,
+        ),
       );
     }
     if (lines.isEmpty) continue;
     final int minsAgo = _intOr(k['orderedMinsAgo'], fallback: 0, min: 0);
     kots.add(Kot(
       id: 'ai-kot-${++seq}',
-      table: _str(k['table'], fallback: '$seq'),
+      table: _str(k['table'], fallback: '$seq', maxLen: 16),
       type: _parseType(k['type']),
       orderedAt: now.subtract(Duration(minutes: minsAgo)),
       lines: lines,
@@ -271,9 +277,8 @@ Result<DemoData> _validateDataset(
 /// Decode a response body as UTF-8 from its raw bytes.
 ///
 /// `http`'s `Response.body` getter falls back to **latin1** when the response
-/// has no `charset` (Gemini sends `application/json` without one), which mangles
-/// multi-byte UTF-8 — e.g. dish emoji. Reading the bytes as UTF-8 ourselves
-/// keeps emoji and accents intact.
+/// has no `charset`, which mangles multi-byte UTF-8 — e.g. dish emoji. Reading
+/// the bytes as UTF-8 ourselves keeps emoji and accents intact.
 String _bodyAsUtf8(http.Response res) =>
     utf8.decode(res.bodyBytes, allowMalformed: true);
 
@@ -287,7 +292,7 @@ String _stripJsonFences(String s) {
   return t.trim();
 }
 
-/// Best-effort error text from Gemini's JSON error envelope.
+/// Best-effort error text from the API's JSON error envelope.
 String _errorMessageFrom(String body) {
   try {
     final Object? decoded = jsonDecode(body);
@@ -303,8 +308,17 @@ String _errorMessageFrom(String body) {
   return body.length > 200 ? '${body.substring(0, 200)}…' : body;
 }
 
-String _str(Object? v, {String fallback = ''}) =>
-    v is String && v.trim().isNotEmpty ? v.trim() : fallback;
+String _str(Object? v, {String fallback = '', int? maxLen}) {
+  if (v is! String) return fallback;
+  final String s = v.trim();
+  if (s.isEmpty) return fallback;
+  if (maxLen == null) return s;
+  // Clamp by code point (rune) so the cap never splits a surrogate pair into
+  // invalid UTF-16 — defends the UI/TTS against a pathological model response
+  // with an enormous name/note/emoji.
+  final List<int> runes = s.runes.toList();
+  return runes.length <= maxLen ? s : String.fromCharCodes(runes.take(maxLen));
+}
 
 int _intOr(Object? v, {required int fallback, int? min}) {
   int out = switch (v) {
@@ -338,7 +352,7 @@ KotType _parseType(Object? v) {
   return KotType.dineIn;
 }
 
-/// System prompt — describes the exact JSON object Gemini must return.
+/// System prompt — describes the exact JSON object the model must return.
 const String _systemPrompt =
     'You design demo data for a Kitchen Display System (KDS). Invent a '
     'realistic, varied single restaurant and a snapshot of its current dinner '
@@ -349,18 +363,34 @@ const String _systemPrompt =
     '  "menu": [{"id": str, "name": str, "emoji": str, "stationId": str, '
     '"cookMins": int, "holdable": bool, "batchable": bool}],\n'
     '  "kots": [{"table": str, "type": "dineIn"|"takeaway"|"delivery", '
-    '"orderedMinsAgo": int, "lines": [{"dishId": str, "qty": int}]}]\n'
+    '"orderedMinsAgo": int, "lines": [{"dishId": str, "qty": int, '
+    '"note": str (optional special instruction)}]}]\n'
     '}\n'
     'Rules: 6-9 stations, each a distinct cooking line with a distinct hex colour '
     'and capacity 1-3; 10-16 menu dishes spread across the stations with '
     'believable cook times (2-18 min), holdable/batchable flags and a fitting '
-    'emoji; 4-7 tickets, each with 1-4 line items, a mix of '
-    'dineIn/takeaway/delivery, orderedMinsAgo 0-8. Every menu dish stationId MUST '
-    'match a station id; every line dishId MUST match a menu id. Use short '
-    'lowercase-slug ids. Make each generation feel different: vary the cuisine '
-    'theme, station mix, dish names and the tickets.';
+    'emoji; 4-7 tickets, each with 1-4 line items and orderedMinsAgo 0-8. '
+    'Weight each ticket "type" heavily toward dineIn: about 80% dineIn, ~10% '
+    'delivery, ~10% takeaway — i.e. the large majority are dineIn, with only the '
+    'occasional delivery or takeaway across the batch. Give roughly a third of the '
+    'line items a short "note" — a realistic kitchen instruction like "no salt", '
+    '"extra spicy", "well done", "allergy: nuts", "sauce on the side" (omit it '
+    'on the rest). Every menu dish stationId MUST match a station id; every line '
+    'dishId MUST match a menu id. Use short lowercase-slug ids.\n'
+    'CUISINE: The restaurant serves food popular in the United States. Pick a '
+    'different mainstream American style each generation — e.g. classic American '
+    'diner, burger & grill, BBQ smokehouse, Tex-Mex, Southern comfort, '
+    'steakhouse, seafood shack, New York pizza / Italian-American, or all-day '
+    'brunch. Use dish names a typical US diner would instantly recognise '
+    '(cheeseburger, buffalo wings, mac & cheese, BBQ ribs, clam chowder, Caesar '
+    'salad, fried chicken, pancakes, club sandwich, apple pie, etc.). Vary the '
+    'American style, station mix, dish names, tickets and notes each time so no '
+    'two generations feel the same — but do NOT use Indian, Nepali, or other '
+    'South-Asian cuisines.';
 
-/// User turn — nudges variety so each tap differs.
+/// User turn — nudges variety so each tap differs, anchored to US cuisine.
 const String _userPrompt =
-    'Generate a fresh restaurant and its current rush now. Surprise me with the '
-    'cuisine and dishes — make it different from a generic sample.';
+    'Generate a fresh American restaurant and its current dinner rush now. Pick a '
+    'different US-popular style than a generic sample (diner, BBQ, burgers, '
+    'Tex-Mex, steakhouse, seafood, pizza, brunch…) with dishes American diners '
+    'know well.';

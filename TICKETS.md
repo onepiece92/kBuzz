@@ -37,7 +37,9 @@ Line {
   state: 'open' | 'served' | 'void',
   recook: int,               // how many times sent back (quality metric)
   reAt:   int | null,        // set => re-fired NOW (recook or expedite); the minute it was re-fired
-  reason: string | null      // recook reason; null on a plain expedite/fire-missing
+  reason: string | null,     // recook reason; null on a plain expedite/fire-missing
+  note:   string | null      // free-text special instruction (e.g. "no salt"); shown on
+                             // Tickets + Stations and read aloud with the fire alert
 }
 ```
 
@@ -110,6 +112,7 @@ A ticket is **resolvable** (Done without warning) once every line is `served` or
 | **Fire now / expedite** (missing) | line | open → `reAt=now`, no reason | **re-fires now**, shows `FIRE NOW` (orange), jumps queue | — |
 | **Void / 86** | line | open → void | excluded from schedule | — |
 | **Restore** | line | void → open | re-enters schedule | — |
+| **Set note** | line | set / clear `note` | shows on Stations (bar 📝 + detail) and is **read aloud** with the fire alert | — |
 | **Rush** | ticket | toggle `rush` | SLA → `min(SLA, RUSH_SLA)` + all lines priority → whole ticket fires sooner, shows `RUSH` | — |
 | **Mark Done** | ticket | active → done | ticket leaves active board | if any `open` line: confirm "N not served, close anyway?" |
 | **Reopen** | ticket | done → active | back on the board | — |
@@ -166,8 +169,12 @@ Sort: **active tickets by plate target ascending; Done tickets last.**
 ### Item action sheet (bottom sheet, contextual)
 - `void` line → **Restore** only.
 - `served` line → **Mark unserved**, **Recook (send back)…**.
-- `open` line → **Mark served**, **Recook (send back)…**, **Fire now — missing / expedite**, **Void / 86**.
+- `open` line → **Mark served**, **Recook (send back)…**, **Fire now — missing / expedite**,
+  **Add / Edit note**, **Void / 86**.
 - **Recook** opens a reason sub-step (`RECOOK_REASONS`) → applies the recook with that reason.
+- **Add / Edit note** opens a small dialog (free text, ≤80 chars; "Clear" removes it) → writes
+  `note` via `setLineNote`. The note renders in amber under the line, on the Stations bar/detail, and
+  is spoken with the fire alert.
 
 ### Done-confirm dialog
 Shown only when closing a ticket with unserved items: "N items not served yet. Close it anyway?" →
@@ -216,8 +223,8 @@ idempotent by `(lineId, action, timestamp)`.
 
 - Lives in `features/tickets/`. Reads a `StreamProvider` of active tickets (Drift stream) → `AsyncValue`.
 - Each action = a **repository command** (`serve`, `unserve`, `void`, `restore`, `recook(reason)`,
-  `fireNow`, `setRush`, `markDone`, `reopen`) that writes Drift + outbox in one transaction. **No
-  business logic in widgets.**
+  `fireNow`, `setRush`, `setLineNote`, `markDone`, `reopen`) that writes Drift + outbox in one
+  transaction. **No business logic in widgets.**
 - The action sheet, reason picker, and done-confirm are UI-only; they call repo commands.
 - Cooking status + derived flags come from the schedule provider; the page never recomputes the plan.
 
@@ -233,6 +240,8 @@ idempotent by `(lineId, action, timestamp)`.
 - [x] Rush tightens the ticket SLA and prioritises all its lines; the kitchen shows `RUSH`.
 - [x] Mark Done warns when items are unserved; Reopen restores the ticket.
 - [x] Under-lamp warning appears for ready-but-unserved items past `READY_LIMIT`.
+- [x] A line's special instruction (`note`) can be added / edited / cleared from the item sheet, shows
+      on the Tickets + Stations boards, and is read aloud with the fire alert.
 - [~] Every action works offline and the kitchen views reflect it (✓ via Drift write-through +
       reschedule + priority badges). **Sync events** (`ItemServed`, …) are deferred with the sync
       engine (§6, post-MVP).

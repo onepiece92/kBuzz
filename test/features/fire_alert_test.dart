@@ -11,6 +11,7 @@ ScheduledDish _dish({
   int qty = 1,
   PriorityKind priority = PriorityKind.none,
   List<String> kotIds = const <String>[],
+  Map<String, String> notes = const <String, String>{},
 }) =>
     ScheduledDish(
       uid: fireAt, // arbitrary
@@ -23,7 +24,12 @@ ScheduledDish _dish({
       batchable: false,
       members: <ScheduledMember>[
         for (final String id in kotIds)
-          ScheduledMember(kotId: id, table: id, type: KotType.dineIn, qty: qty),
+          ScheduledMember(
+              kotId: id,
+              table: id,
+              type: KotType.dineIn,
+              qty: qty,
+              note: notes[id]),
       ],
       qty: qty,
       targetMins: fireAt + 5,
@@ -350,6 +356,60 @@ void main() {
           alerted: alerted,
         ),
         isEmpty,
+      );
+    });
+  });
+
+  group('special-instruction notes in the fire audio', () {
+    test('detectFires unions member notes onto the alert', () {
+      final List<FireAlert> fired = detectFires(
+        dishes: <ScheduledDish>[
+          _dish(
+            dishId: 'burger',
+            stationId: 'grill',
+            fireAt: 0,
+            name: 'Burger',
+            kotIds: <String>['t1', 't2'],
+            notes: <String, String>{'t1': 'no pickles', 't2': 'extra cheese'},
+          ),
+        ],
+        stationsById: stations,
+        elapsedMins: 0,
+        started: true,
+        alerted: <String>{},
+      );
+      expect(fired.single.notes, <String>['no pickles', 'extra cheese']);
+      expect(fired.single.spokenText,
+          'Fire Grill — 1 Burger, note: no pickles; extra cheese');
+    });
+
+    test('a cook with no notes speaks plainly', () {
+      const FireAlert a = FireAlert(
+        stationId: 'grill',
+        stationName: 'Grill',
+        dishName: 'Burger',
+        qty: 1,
+      );
+      expect(a.spokenText, 'Fire Grill — 1 Burger');
+    });
+
+    test('batchSpokenText includes each item\'s note', () {
+      const FireAlert a = FireAlert(
+        stationId: 'grill',
+        stationName: 'Grill',
+        dishName: 'Burger',
+        qty: 1,
+        notes: <String>['no pickles'],
+      );
+      const FireAlert b = FireAlert(
+        stationId: 'steam',
+        stationName: 'Steam',
+        dishName: 'Momo',
+        qty: 1,
+      );
+      expect(
+        batchSpokenText(<FireAlert>[a, b]),
+        'Fire Grill — 1 Burger, note: no pickles, and Steam — 1 Momo',
       );
     });
   });

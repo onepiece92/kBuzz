@@ -21,6 +21,11 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    // scrollUntilVisible stops as soon as the button enters the viewport, which
+    // can leave it at the very bottom edge (under the FAB/nav). Align it fully
+    // into view so the tap lands cleanly.
+    await tester.ensureVisible(find.text('Generate demo data'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Generate demo data'));
     await tester.pump(); // emit state + insert toast
     // No AI key in tests → a randomized rush, so assert on the generic

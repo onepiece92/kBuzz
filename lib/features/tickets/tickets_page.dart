@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:kbuzz/app/theme.dart';
 import 'package:kbuzz/core/format.dart';
 import 'package:kbuzz/core/widgets/app_badge.dart';
+import 'package:kbuzz/core/widgets/note_line.dart';
 import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/features/board/board_data.dart';
@@ -22,10 +23,12 @@ const List<String> kRecookReasons = <String>[
 /// Minutes a line may sit ready-but-unserved before the "under-lamp" warning.
 const int kReadyLimitMins = 4;
 
-const Color _green = Color(0xFF34D399);
-const Color _amber = Color(0xFFFBBF24);
-const Color _red = Color(0xFFF87171);
-const Color _orange = KBuzzColors.brandPrimary;
+// Expo status palette — single source of truth lives in theme.dart so a rebrand
+// is one edit; these short aliases keep the call sites terse.
+const Color _green = kStatusReady;
+const Color _amber = kStatusHeld;
+const Color _red = kStatusLate;
+const Color _orange = kStatusFiring;
 
 /// Tickets — the **waiter** expo page (TICKETS.md). Each ticket is a card the
 /// waiter drives: tap a line for the action sheet (serve / recook / fire-now /
@@ -135,7 +138,12 @@ class _TicketCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          _header(done: done, allReady: allReady),
+          _TicketHeader(
+            kot: kot,
+            now: board.now,
+            done: done,
+            allReady: allReady,
+          ),
           const SizedBox(height: 6),
           Text(
             done
@@ -154,16 +162,54 @@ class _TicketCard extends StatelessWidget {
               plateMins: status.plateMins,
             ),
           const SizedBox(height: 8),
-          _footer(context, done: done, anyOpen: anyOpen, allResolved: _allResolved()),
+          _TicketFooter(
+            kot: kot,
+            done: done,
+            anyOpen: anyOpen,
+            allResolved: _allResolved(),
+          ),
         ],
       ),
     );
   }
 
-  Widget _header({
-    required bool done,
-    required bool allReady,
-  }) {
+  bool _allResolved() =>
+      kot.lines.every((OrderLine l) => l.state != LineState.open);
+
+  // Gate on the same ticket [plateMins] the line tiles use, so the header
+  // "all ready" never contradicts a line still "holding for table".
+  bool _allReady(int plateMins) {
+    if (!clock.started) return false;
+    final List<OrderLine> open =
+        kot.lines.where((OrderLine l) => l.state == LineState.open).toList();
+    if (open.isEmpty) return false;
+    return open.every((OrderLine l) {
+      final ScheduledDish? d = _schedFor(board, kot.id, l.dishId);
+      return d != null &&
+          dishLiveStatus(d, clock.elapsedMins,
+                  started: true, plateMins: plateMins) ==
+              DishLiveStatus.ready;
+    });
+  }
+}
+
+/// The ticket card's top row: code + type, a RUSH/DONE/all-ready tag, and the
+/// ticket's age. Pure presentation — the derived booleans come from [_TicketCard].
+class _TicketHeader extends StatelessWidget {
+  const _TicketHeader({
+    required this.kot,
+    required this.now,
+    required this.done,
+    required this.allReady,
+  });
+
+  final Kot kot;
+  final DateTime now;
+  final bool done;
+  final bool allReady;
+
+  @override
+  Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
         Text(
@@ -184,19 +230,31 @@ class _TicketCard extends StatelessWidget {
           const _Tag('all ready', _green),
         const SizedBox(width: 8),
         Text(
-          _ageLabel(kot.orderedAt, board.now),
+          _ageLabel(kot.orderedAt, now),
           style: kMonoNumberStyle.copyWith(color: Colors.white38, fontSize: 11),
         ),
       ],
     );
   }
+}
 
-  Widget _footer(
-    BuildContext context, {
-    required bool done,
-    required bool anyOpen,
-    required bool allResolved,
-  }) {
+/// The ticket card's action row: Rush toggle + Serve-all + Done (with an
+/// unserved-items confirm), or a Reopen button once the ticket is done.
+class _TicketFooter extends StatelessWidget {
+  const _TicketFooter({
+    required this.kot,
+    required this.done,
+    required this.anyOpen,
+    required this.allResolved,
+  });
+
+  final Kot kot;
+  final bool done;
+  final bool anyOpen;
+  final bool allResolved;
+
+  @override
+  Widget build(BuildContext context) {
     final DemoDataCubit cubit = context.read<DemoDataCubit>();
     if (done) {
       return Align(
@@ -263,26 +321,8 @@ class _TicketCard extends StatelessWidget {
         ],
       ),
     );
+    if (!context.mounted) return;
     if (close ?? false) cubit.markTicketDone(kot.id);
-  }
-
-  bool _allResolved() =>
-      kot.lines.every((OrderLine l) => l.state != LineState.open);
-
-  // Gate on the same ticket [plateMins] the line tiles use, so the header
-  // "all ready" never contradicts a line still "holding for table".
-  bool _allReady(int plateMins) {
-    if (!clock.started) return false;
-    final List<OrderLine> open =
-        kot.lines.where((OrderLine l) => l.state == LineState.open).toList();
-    if (open.isEmpty) return false;
-    return open.every((OrderLine l) {
-      final ScheduledDish? d = _schedFor(board, kot.id, l.dishId);
-      return d != null &&
-          dishLiveStatus(d, clock.elapsedMins,
-                  started: true, plateMins: plateMins) ==
-              DishLiveStatus.ready;
-    });
   }
 }
 
@@ -420,6 +460,8 @@ class _LineTile extends StatelessWidget {
                   ],
                 ],
               ),
+              if ((line.note ?? '').trim().isNotEmpty)
+                NoteLine(line.note!.trim()),
               if (d != null)
                 Text(
                   _timingLabel(d, status),
@@ -542,6 +584,15 @@ Future<void> _showLineSheet(BuildContext context, Kot kot, OrderLine line) async
                         'Fire now — missing / expedite',
                         () => cubit.fireNowLine(lineId, reAtMins: reAt),
                         color: _orange),
+                    tile(
+                        (line.note ?? '').trim().isEmpty
+                            ? Icons.sticky_note_2_outlined
+                            : Icons.edit_note,
+                        (line.note ?? '').trim().isEmpty
+                            ? 'Add note'
+                            : 'Edit note',
+                        () => _showNoteDialog(context, cubit, line),
+                        color: _amber),
                     tile(Icons.block, 'Void / 86',
                         () => cubit.voidLine(lineId), color: Colors.white54),
                   ],
@@ -588,6 +639,82 @@ Future<void> _showReasonSheet(
       ),
     ),
   );
+}
+
+/// Add / edit / clear a line's special instruction (e.g. "no salt"). Returns
+/// after writing through [DemoDataCubit.setLineNote] (or no-op on cancel).
+Future<void> _showNoteDialog(
+  BuildContext context,
+  DemoDataCubit cubit,
+  OrderLine line,
+) async {
+  final String? lineId = line.id;
+  if (lineId == null) return; // not yet persisted — no stable target
+  // The dialog returns null on cancel; '' to clear; or the new text. The
+  // controller lives inside [_NoteDialog] so it's disposed with the dialog's
+  // own lifecycle (disposing it here would crash mid-dismiss-animation).
+  final String? result = await showDialog<String>(
+    context: context,
+    builder: (BuildContext _) => _NoteDialog(initial: line.note ?? ''),
+  );
+  if (result == null) return; // cancelled — leave the note unchanged
+  cubit.setLineNote(lineId, result); // empty string clears it
+}
+
+/// Text-entry dialog for a line's special instruction. Owns its
+/// [TextEditingController] so it's disposed when the dialog route is removed.
+class _NoteDialog extends StatefulWidget {
+  const _NoteDialog({required this.initial});
+
+  final String initial;
+
+  @override
+  State<_NoteDialog> createState() => _NoteDialogState();
+}
+
+class _NoteDialogState extends State<_NoteDialog> {
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: KBuzzColors.surface,
+      title: const Text('Special instruction'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 80,
+        textCapitalization: TextCapitalization.sentences,
+        decoration: const InputDecoration(
+          hintText: 'e.g. no salt, extra spicy, allergy: nuts',
+          border: OutlineInputBorder(),
+        ),
+        onSubmitted: (String v) => Navigator.of(context).pop(v),
+      ),
+      actions: <Widget>[
+        if (widget.initial.trim().isNotEmpty)
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(''), // clear
+            child: const Text('Clear', style: TextStyle(color: _red)),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(), // cancel
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: const Text('Save'),
+        ),
+      ],
+    );
+  }
 }
 
 class _SectionDivider extends StatelessWidget {

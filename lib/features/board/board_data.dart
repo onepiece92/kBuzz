@@ -18,6 +18,8 @@ class BoardData {
     required this.stationsById,
     required this.kotsById,
     required this.statusByKotId,
+    required this.fireOrder,
+    required this.stationLanes,
   });
 
   factory BoardData.from(DemoData data, {required DateTime now}) {
@@ -45,6 +47,24 @@ class BoardData {
       for (final Kot k in data.kots)
         k.id: scheduler.ticketStatusFor(k, result.dishes, now: now),
     };
+    // All cooks in fire order — computed once here, not per access. The Fire-next
+    // board re-reads this on every clock tick; a getter would re-copy+sort all
+    // dishes each second.
+    final List<ScheduledDish> fireOrder = List<ScheduledDish>.of(result.dishes)
+      ..sort((ScheduledDish a, ScheduledDish b) {
+        final int byFire = a.fireAt.compareTo(b.fireAt);
+        return byFire != 0 ? byFire : a.uid.compareTo(b.uid);
+      });
+    // Stations with scheduled dishes, in declaration order, paired with their
+    // lane-packed [StationLane] — likewise computed once.
+    final List<({Station station, StationLane lane})> stationLanes =
+        <({Station station, StationLane lane})>[];
+    for (final Station station in data.stations) {
+      final StationLane? lane = result.byStation[station.id];
+      if (lane != null && lane.dishes.isNotEmpty) {
+        stationLanes.add((station: station, lane: lane));
+      }
+    }
     return BoardData._(
       data: data,
       schedule: result,
@@ -52,6 +72,8 @@ class BoardData {
       stationsById: stationsById,
       kotsById: kotsById,
       statusByKotId: statusByKotId,
+      fireOrder: fireOrder,
+      stationLanes: stationLanes,
     );
   }
 
@@ -64,31 +86,15 @@ class BoardData {
   /// Per-ticket plate roll-up, precomputed once (see [BoardData.from]).
   final Map<String, TicketStatus> statusByKotId;
 
-  Station? stationOf(String stationId) => stationsById[stationId];
-
-  /// All cooks in fire order (earliest [ScheduledDish.fireAt] first).
-  List<ScheduledDish> get fireOrder {
-    final List<ScheduledDish> sorted = List<ScheduledDish>.of(schedule.dishes);
-    sorted.sort((ScheduledDish a, ScheduledDish b) {
-      final int byFire = a.fireAt.compareTo(b.fireAt);
-      return byFire != 0 ? byFire : a.uid.compareTo(b.uid);
-    });
-    return sorted;
-  }
+  /// All cooks in fire order (earliest [ScheduledDish.fireAt] first). Computed
+  /// once in [BoardData.from]; the Fire-next board reads it on every clock tick.
+  final List<ScheduledDish> fireOrder;
 
   /// Stations that actually have scheduled dishes, in declaration order, each
-  /// paired with its lane-packed [StationLane].
-  List<({Station station, StationLane lane})> get stationLanes {
-    final List<({Station station, StationLane lane})> out =
-        <({Station station, StationLane lane})>[];
-    for (final Station station in data.stations) {
-      final StationLane? lane = schedule.byStation[station.id];
-      if (lane != null && lane.dishes.isNotEmpty) {
-        out.add((station: station, lane: lane));
-      }
-    }
-    return out;
-  }
+  /// paired with its lane-packed [StationLane]. Computed once in [BoardData.from].
+  final List<({Station station, StationLane lane})> stationLanes;
+
+  Station? stationOf(String stationId) => stationsById[stationId];
 
   /// Per-ticket plate roll-up (target vs plate time, lateness). O(1) — read from
   /// the map precomputed in [BoardData.from]; falls back to a live compute for a
