@@ -301,8 +301,10 @@ class _StationTimeline extends StatelessWidget {
 
   // Taller than a single text line so a bar can show the dish name with its
   // special-instruction note underneath (notes-less bars just center the name).
-  static const double laneHeight = 40;
-  static const double barHeight = 34;
+  // Tall enough for a two-line name plus a two-line note (option D — wrap rather
+  // than ellipsise a short bar's label away). Shorter labels centre vertically.
+  static const double laneHeight = 72;
+  static const double barHeight = 66;
   static const double minBarWidth = 46;
 
   final List<ScheduledDish> dishes;
@@ -500,8 +502,8 @@ class _DishBar extends StatelessWidget {
 /// The label for a [_DishBar]: emoji + name (+qty), a live cooking/ready glyph,
 /// and the optional special-instruction line. Drawn as its own layer (see
 /// [_StationTimeline._buildLabel]) sized to its bar plus the idle gap after it,
-/// and **ellipsises** within that width so long names (e.g. drinks) stay legible
-/// rather than being hard-clipped to a short time-scaled bar.
+/// and **wraps to two lines** (then ellipsises) within that width so a long name
+/// or note stays legible rather than being hard-clipped to a short bar.
 class _DishBarLabel extends StatelessWidget {
   const _DishBarLabel({required this.dish, required this.status});
 
@@ -530,9 +532,8 @@ class _DishBarLabel extends StatelessWidget {
               Flexible(
                 child: Text(
                   dish.qty > 1 ? '${dish.name} ×${dish.qty}' : dish.name,
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  softWrap: false,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 11,
@@ -560,7 +561,7 @@ class _DishBarLabel extends StatelessWidget {
               fontWeight: FontWeight.w500,
               topPadding: 1,
               flexible: true,
-              maxLines: 1,
+              maxLines: 2,
             ),
         ],
       ),
