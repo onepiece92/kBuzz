@@ -12,7 +12,7 @@ class NoteLine extends StatelessWidget {
   const NoteLine(
     this.text, {
     super.key,
-    this.color = kStatusHeld,
+    this.color,
     this.iconColor,
     this.fontSize = 12,
     this.iconSize = 13,
@@ -25,7 +25,10 @@ class NoteLine extends StatelessWidget {
   final String text;
 
   /// Text colour (and the icon colour unless [iconColor] overrides it).
-  final Color color;
+  ///
+  /// Defaults to the theme's held / special-note colour ([KdsColors.expoHeld])
+  /// when null, resolved against the active theme in [build].
+  final Color? color;
   final Color? iconColor;
   final double fontSize;
   final double iconSize;
@@ -43,14 +46,16 @@ class NoteLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
+    final Color effectiveColor = color ?? c.expoHeld;
     final Widget label = Text(
       text,
       maxLines: maxLines,
       overflow: maxLines == null ? null : TextOverflow.ellipsis,
       style: TextStyle(
-        color: color,
+        color: effectiveColor,
         fontSize: fontSize,
-        fontStyle: FontStyle.italic,
+        fontFamily: kJetBrainsMono,
         fontWeight: fontWeight,
       ),
     );
@@ -61,7 +66,7 @@ class NoteLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Icon(Icons.sticky_note_2_outlined,
-              size: iconSize, color: iconColor ?? color),
+              size: iconSize, color: iconColor ?? effectiveColor),
           SizedBox(width: flexible ? 4 : 2),
           if (flexible) Flexible(child: label) else label,
         ],

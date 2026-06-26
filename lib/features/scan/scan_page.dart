@@ -361,11 +361,12 @@ class _DropCaptureStepState extends State<_DropCaptureStep> {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final Color border = _hovering
-        ? KBuzzColors.brandPrimary
-        : Colors.white24;
+        ? c.brand
+        : c.hairlineStrong;
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(kSpaceLg),
       child: Column(
         children: <Widget>[
           Expanded(
@@ -379,45 +380,45 @@ class _DropCaptureStepState extends State<_DropCaptureStep> {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: _hovering
-                      ? KBuzzColors.brandPrimary.withValues(alpha: 0.08)
-                      : Colors.black,
-                  borderRadius: BorderRadius.circular(16),
+                      ? c.brand.withValues(alpha: 0.08)
+                      : c.scrim,
+                  borderRadius: BorderRadius.circular(kRadiusXl),
                   border: Border.all(color: border, width: 2),
                 ),
                 child: Center(
                   child: widget.scanning
-                      ? const Column(
+                      ? Column(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
                             CircularProgressIndicator(
-                                color: KBuzzColors.brandPrimary),
-                            SizedBox(height: 12),
+                                color: c.brand),
+                            const SizedBox(height: kSpaceMd),
                             Text('Reading ticket…',
-                                style: TextStyle(color: Colors.white70)),
+                                style: TextStyle(color: c.textSecondary)),
                           ],
                         )
                       : Padding(
-                          padding: const EdgeInsets.all(24),
+                          padding: const EdgeInsets.all(kSpaceXl),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: <Widget>[
                               Icon(Icons.image_outlined,
                                   size: 48,
                                   color: _hovering
-                                      ? KBuzzColors.brandPrimary
-                                      : Colors.white38),
-                              const SizedBox(height: 12),
-                              const Text(
+                                      ? c.brand
+                                      : c.textFaint),
+                              const SizedBox(height: kSpaceMd),
+                              Text(
                                 'Drag & drop a KOT / receipt image here',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                    color: Colors.white70,
+                                    color: c.textSecondary,
                                     fontWeight: FontWeight.w600),
                               ),
-                              const SizedBox(height: 4),
-                              const Text(
+                              const SizedBox(height: kSpaceXs),
+                              Text(
                                 'desktop / macOS — or choose a file below',
-                                style: TextStyle(color: Colors.white38),
+                                style: TextStyle(color: c.textFaint),
                               ),
                             ],
                           ),
@@ -426,7 +427,7 @@ class _DropCaptureStepState extends State<_DropCaptureStep> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: kSpaceLg),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -435,7 +436,7 @@ class _DropCaptureStepState extends State<_DropCaptureStep> {
               label: const Text('Choose a file'),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: kSpaceSm),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -467,41 +468,42 @@ class _CaptureStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(kSpaceLg),
       child: Column(
         children: <Widget>[
           Expanded(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white12),
+                color: c.scrim,
+                borderRadius: BorderRadius.circular(kRadiusXl),
+                border: Border.all(color: c.hairline),
               ),
               child: Center(
                 child: scanning
-                    ? const Column(
+                    ? Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
                           CircularProgressIndicator(
-                              color: KBuzzColors.brandPrimary),
-                          SizedBox(height: 12),
+                              color: c.brand),
+                          const SizedBox(height: kSpaceMd),
                           Text('Reading ticket…',
-                              style: TextStyle(color: Colors.white70)),
+                              style: TextStyle(color: c.textSecondary)),
                         ],
                       )
-                    : const Padding(
-                        padding: EdgeInsets.all(24),
+                    : Padding(
+                        padding: const EdgeInsets.all(kSpaceXl),
                         child: Text(
                           'Position the paper KOT inside the frame',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.white38),
+                          style: TextStyle(color: c.textFaint),
                         ),
                       ),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: kSpaceLg),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
@@ -510,7 +512,7 @@ class _CaptureStep extends StatelessWidget {
               label: const Text('Upload image'),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: kSpaceSm),
           Row(
             children: <Widget>[
               Expanded(
@@ -520,7 +522,7 @@ class _CaptureStep extends StatelessWidget {
                   label: const Text('Enter manually'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: kSpaceMd),
               Expanded(
                 child: FilledButton.icon(
                   onPressed: scanning ? null : onScan,
@@ -552,17 +554,18 @@ class _ReviewStep extends StatelessWidget {
   final VoidCallback onSubmit;
 
   Future<void> _pickDish(BuildContext context) async {
+    final KdsColors c = KdsColors.of(context);
     final Dish? picked = await showModalBottomSheet<Dish>(
       context: context,
-      backgroundColor: KBuzzColors.surface,
+      backgroundColor: c.surface,
       builder: (BuildContext context) => ListView(
         children: <Widget>[
           for (final Dish d in menu)
             ListTile(
-              leading: Text(d.emoji, style: const TextStyle(fontSize: 20)),
+              leading: Text(d.emoji, style: const TextStyle(fontSize: kFontXl)),
               title: Text(d.name),
               trailing: Text('${d.cookMins}m',
-                  style: const TextStyle(color: Colors.white54)),
+                  style: TextStyle(color: c.textMuted)),
               onTap: () => Navigator.of(context).pop(d),
             ),
         ],
@@ -580,7 +583,7 @@ class _ReviewStep extends StatelessWidget {
       children: <Widget>[
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(kSpaceLg),
             children: <Widget>[
               _TypeSelector(
                 type: draft.type,
@@ -589,7 +592,7 @@ class _ReviewStep extends StatelessWidget {
                   onChanged();
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: kSpaceMd),
               _TableRow(
                 tableStr: tableStr,
                 onMinus: () {
@@ -603,7 +606,7 @@ class _ReviewStep extends StatelessWidget {
                   onChanged();
                 },
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: kSpaceLg),
               for (int i = 0; i < draft.lines.length; i++)
                 _LineCard(
                   line: draft.lines[i],
@@ -613,7 +616,7 @@ class _ReviewStep extends StatelessWidget {
                   },
                   onChanged: onChanged,
                 ),
-              const SizedBox(height: 8),
+              const SizedBox(height: kSpaceSm),
               OutlinedButton.icon(
                 onPressed: () => _pickDish(context),
                 icon: const Icon(Icons.add),
@@ -625,7 +628,7 @@ class _ReviewStep extends StatelessWidget {
         SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(kSpaceLg),
             child: SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -677,11 +680,12 @@ class _TableRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: kSpaceMd, vertical: kSpaceSm),
       decoration: BoxDecoration(
-        color: KBuzzColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        color: c.surface,
+        borderRadius: BorderRadius.circular(kRadiusLg),
       ),
       child: Row(
         children: <Widget>[
@@ -690,7 +694,7 @@ class _TableRow extends StatelessWidget {
           IconButton(onPressed: onMinus, icon: const Icon(Icons.remove)),
           Text(tableStr,
               style: kMonoNumberStyle.copyWith(
-                  color: Colors.white, fontSize: 16)),
+                  color: c.textPrimary, fontSize: kFontLg)),
           IconButton(onPressed: onPlus, icon: const Icon(Icons.add)),
         ],
       ),
@@ -711,14 +715,15 @@ class _LineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final Color color =
-        kStationColors[line.dish.stationId] ?? KBuzzColors.brandPrimary;
+        kStationColors[line.dish.stationId] ?? c.brand;
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: kSpaceSm),
+      padding: const EdgeInsets.all(kSpaceMd),
       decoration: BoxDecoration(
-        color: KBuzzColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        color: c.surface,
+        borderRadius: BorderRadius.circular(kRadiusLg),
         border: Border(left: BorderSide(color: color, width: 4)),
       ),
       child: Column(
@@ -726,29 +731,29 @@ class _LineCard extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Text(line.dish.emoji, style: const TextStyle(fontSize: 18)),
-              const SizedBox(width: 8),
+              Text(line.dish.emoji, style: const TextStyle(fontSize: kFontXl)),
+              const SizedBox(width: kSpaceSm),
               Expanded(
                 child: Text(line.dish.name,
                     style: const TextStyle(fontWeight: FontWeight.w600)),
               ),
               if (line.isAdHoc) ...<Widget>[
-                const AppBadge(
+                AppBadge(
                   'off-menu',
-                  KBuzzColors.brandPrimary,
-                  fontSize: 9,
+                  c.brand,
+                  fontSize: kFontMicro,
                   fontWeight: FontWeight.w800,
                   horizontal: 6,
                   vertical: 2,
                   radius: 5,
                   alpha: 0.18,
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: kSpaceSm),
               ],
               IconButton(
                 onPressed: onRemove,
                 icon: const Icon(Icons.close, size: 18),
-                color: Colors.white38,
+                color: c.textFaint,
               ),
             ],
           ),
@@ -768,7 +773,7 @@ class _LineCard extends StatelessWidget {
                   onChanged();
                 },
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: kSpaceMd),
               _Stepper(
                 label: 'Cook',
                 value: '${line.cookMins}m',
@@ -806,18 +811,19 @@ class _Stepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        Text(label, style: const TextStyle(color: Colors.white54, fontSize: 12)),
-        const SizedBox(width: 6),
+        Text(label, style: TextStyle(color: c.textMuted, fontSize: kFontSm)),
+        const SizedBox(width: kSpaceSm),
         IconButton(
           visualDensity: VisualDensity.compact,
           onPressed: onMinus,
           icon: const Icon(Icons.remove, size: 18),
         ),
         Text(value,
-            style: kMonoNumberStyle.copyWith(color: Colors.white, fontSize: 14)),
+            style: kMonoNumberStyle.copyWith(color: c.textPrimary, fontSize: kFontMd)),
         IconButton(
           visualDensity: VisualDensity.compact,
           onPressed: onPlus,

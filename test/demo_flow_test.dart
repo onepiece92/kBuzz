@@ -46,7 +46,9 @@ void main() {
 
     // The Stations board left its empty state — the rush reached the boards.
     await tester.tap(find.byIcon(Icons.view_week_outlined));
-    await tester.pumpAndSettle();
+    // The Stations rail's name marquee loops forever, so advance a fixed amount
+    // rather than pumpAndSettle (which would never settle).
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('No tickets yet'), findsNothing);
     expect(find.widgetWithText(AppBar, 'Stations'), findsOneWidget);
   });

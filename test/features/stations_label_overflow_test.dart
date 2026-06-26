@@ -15,17 +15,13 @@ class _FixedClock extends Clock {
   DateTime now() => _now;
 }
 
-/// Regression for the Stations rail label (option D — wrap to two lines): a long
-/// dish name *and* a long special-instruction note on a tight bar must wrap and
-/// stay within the lane height, not throw a RenderFlex overflow (which is what
-/// happened when the lane wasn't tall enough for two wrapped lines).
+/// Regression for the Stations rail bar (true-Gantt, sliding labels): a long
+/// dish name and its note both render on the bar — name on the first line, note
+/// on a second line beneath it — with no overflow / bleed even on a thin
+/// short-cook bar.
 void main() {
-  testWidgets('a long name + long note wrap on the rail without overflowing',
+  testWidgets('name and note both render on the bar (sliding), no overflow',
       (WidgetTester tester) async {
-    // Default 800×600 surface. A short cook with a late fire time lands far
-    // right, so its label is narrow → the long name + note wrap to two lines.
-    // A *vertical* overflow then records an exception and fails the test —
-    // exactly the regression (lane too short for two wrapped lines) we guard.
     final DateTime now = DateTime(2026, 1, 1, 12);
     final DemoDataCubit demo = DemoDataCubit(clock: _FixedClock(now));
     final ServiceClockCubit clock = ServiceClockCubit();
@@ -71,15 +67,20 @@ void main() {
           BlocProvider<ServiceClockCubit>.value(value: clock),
           BlocProvider<SettingsCubit>(create: (_) => SettingsCubit()),
         ],
-        child: const MaterialApp(home: StationsPage()),
+        // TickerMode off so the bar-name marquee sits still (pumpAndSettle
+        // would never settle against a forever-looping animation).
+        child: const MaterialApp(
+          home: TickerMode(enabled: false, child: StationsPage()),
+        ),
       ),
     );
     await tester.pumpAndSettle();
 
-    // No overflow exception was recorded, and both the (ellipsised-but-whole)
-    // name and the note string are present on the rail.
+    // No overflow; the name is on the first line and the note on a second line
+    // beneath it (both present as Text, even with the marquee held still).
     expect(tester.takeException(), isNull);
     expect(find.textContaining('Raw Oysters'), findsWidgets);
+    expect(find.byIcon(Icons.sticky_note_2_outlined), findsWidgets);
     expect(find.textContaining('allergy:'), findsWidgets);
   });
 }

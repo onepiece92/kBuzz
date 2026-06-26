@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kbuzz/app/theme.dart';
 
 /// The app's soft-tinted badge: a rounded chip with a translucent [color] fill
 /// and bold [color] text, optionally led by an [icon].
@@ -51,7 +52,7 @@ class AppBadge extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                 Icon(icon, size: fontSize + 1, color: color),
-                const SizedBox(width: 4),
+                const SizedBox(width: kSpaceXs),
                 label,
               ],
             ),

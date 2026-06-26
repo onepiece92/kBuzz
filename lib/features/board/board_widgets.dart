@@ -17,21 +17,22 @@ class BoardEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final KdsColors c = KdsColors.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: kSpaceXxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(icon, size: 48, color: theme.colorScheme.primary),
-            const SizedBox(height: 12),
+            const SizedBox(height: kSpaceMd),
             Text(title, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
+            const SizedBox(height: kSpaceXs),
             Text(
               'No tickets yet. Open Profile and tap “Generate demo data” to '
               'load the sample rush.',
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
+              style: theme.textTheme.bodySmall?.copyWith(color: c.textMuted),
             ),
           ],
         ),
@@ -69,10 +70,11 @@ class StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final (String label, Color color) = switch ((holdMins, lateMins)) {
-      (_, final int late) when late > 0 => ('late ${late}m', const Color(0xFFEF4444)),
-      (final int hold, _) when hold > 0 => ('hold ${hold}m', const Color(0xFF0EA5E9)),
-      _ => ('on time', const Color(0xFF10B981)),
+      (_, final int late) when late > 0 => ('late ${late}m', c.danger),
+      (final int hold, _) when hold > 0 => ('hold ${hold}m', c.slackHold),
+      _ => ('on time', c.success),
     };
     return AppBadge(label, color);
   }
@@ -87,16 +89,16 @@ class Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: kSpaceSm, vertical: kSpaceXs),
       decoration: BoxDecoration(
         color: KBuzzColors.brandSecondary,
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(kRadiusMd),
       ),
       child: Text(
         text,
         style: const TextStyle(
           color: Colors.white,
-          fontSize: 11,
+          fontSize: kFontXs,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -127,13 +129,14 @@ class ScheduledDishRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     // Slack the cook has — what the firing order costs. Colour-coded like the
     // status badges: red = will plate late, blue = can hold, green = on time.
     final (String slackText, Color slackColor) = dish.lateMins > 0
-        ? ('plates +${dish.lateMins}m late', const Color(0xFFEF4444))
+        ? ('plates +${dish.lateMins}m late', c.danger)
         : dish.holdMins > 0
-            ? ('can hold ${dish.holdMins}m', const Color(0xFF0EA5E9))
-            : ('on time', const Color(0xFF10B981));
+            ? ('can hold ${dish.holdMins}m', c.slackHold)
+            : ('on time', c.success);
     // Distinct special instructions across the tickets this (possibly batched)
     // cook serves, shown as a line under the dish name.
     final List<String> notes = <String>[
@@ -144,8 +147,8 @@ class ScheduledDishRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        Text(dish.emoji, style: const TextStyle(fontSize: 18)),
-        const SizedBox(width: 8),
+        Text(dish.emoji, style: const TextStyle(fontSize: kFontXl)),
+        const SizedBox(width: kSpaceSm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,35 +160,34 @@ class ScheduledDishRow extends StatelessWidget {
                       dish.qty > 1 ? '${dish.name} ×${dish.qty}' : dish.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      style: TextStyle(color: c.textPrimary, fontSize: kFontMd),
                     ),
                   ),
                   if (dish.isBatched) ...<Widget>[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.merge_type,
-                        size: 14, color: Colors.white38),
+                    const SizedBox(width: kSpaceSm),
+                    Icon(Icons.merge_type, size: 14, color: c.textFaint),
                   ],
                   if (dish.priority != PriorityKind.none) ...<Widget>[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: kSpaceSm),
                     _PriorityBadge(kind: dish.priority, reason: dish.recookReason),
                   ],
                 ],
               ),
               if (noteText != null)
                 NoteLine(noteText, iconSize: 12, maxLines: 1),
-              const SizedBox(height: 2),
+              const SizedBox(height: kSpaceXs),
               Row(
                 children: <Widget>[
                   if (stationColor != null) ...<Widget>[
                     StationDot(color: stationColor!, size: 8),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: kSpaceXs),
                     if (stationName != null) ...<Widget>[
                       Text(
                         stationName!,
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
+                        style: TextStyle(
+                            color: c.textMuted, fontSize: kFontXs),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: kSpaceSm),
                     ],
                   ],
                   Text.rich(
@@ -202,12 +204,12 @@ class ScheduledDishRow extends StatelessWidget {
                       ],
                     ),
                     style: kMonoNumberStyle.copyWith(
-                      color: Colors.white38,
-                      fontSize: 11,
+                      color: c.textFaint,
+                      fontSize: kFontXs,
                     ),
                   ),
                   if (showTables) ...<Widget>[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: kSpaceSm),
                     Flexible(
                       child: Text(
                         dish.members
@@ -215,8 +217,8 @@ class ScheduledDishRow extends StatelessWidget {
                             .join(', '),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            color: Colors.white38, fontSize: 11),
+                        style: TextStyle(
+                            color: c.textFaint, fontSize: kFontXs),
                       ),
                     ),
                   ],
@@ -225,7 +227,7 @@ class ScheduledDishRow extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: kSpaceSm),
         _DishStatusTrailing(dish),
       ],
     );
@@ -244,19 +246,20 @@ class _PriorityBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (kind == PriorityKind.none) return const SizedBox.shrink();
+    final KdsColors c = KdsColors.of(context);
     final (String, Color) styled = switch (kind) {
       PriorityKind.recook => (
           'RECOOK${reason == null ? '' : ' · $reason'}',
-          const Color(0xFFEF4444),
+          c.danger,
         ),
-      PriorityKind.fireNow => ('FIRE NOW', KBuzzColors.brandPrimary),
-      PriorityKind.rush => ('RUSH', KBuzzColors.brandPrimary),
+      PriorityKind.fireNow => ('FIRE NOW', c.brand),
+      PriorityKind.rush => ('RUSH', c.brand),
       PriorityKind.none => ('', Colors.transparent),
     };
     return AppBadge(
       styled.$1,
       styled.$2,
-      fontSize: 9,
+      fontSize: kFontMicro,
       fontWeight: FontWeight.w800,
       horizontal: 6,
       vertical: 2,
@@ -278,6 +281,7 @@ class _DishStatusTrailing extends StatelessWidget {
   Widget build(BuildContext context) {
     return BlocBuilder<ServiceClockCubit, ServiceClockState>(
       builder: (BuildContext context, ServiceClockState clock) {
+        final KdsColors c = KdsColors.of(context);
         switch (dishLiveStatus(dish, clock.elapsedMins, started: clock.started)) {
           case DishLiveStatus.planned:
             return StatusBadge.of(dish);
@@ -286,25 +290,25 @@ class _DishStatusTrailing extends StatelessWidget {
             return _LiveChip(
               icon: Icons.schedule,
               label: mins <= 0 ? 'firing' : 'in ${mins}m',
-              color: Colors.white54,
+              color: c.textMuted,
             );
           case DishLiveStatus.cooking:
-            return const _LiveChip(
+            return _LiveChip(
               icon: Icons.local_fire_department,
               label: 'cooking',
-              color: Color(0xFFF59E0B),
+              color: c.slackCook,
             );
           case DishLiveStatus.held:
-            return const _LiveChip(
+            return _LiveChip(
               icon: Icons.hourglass_bottom,
               label: 'holding',
-              color: Color(0xFFFBBF24),
+              color: c.expoHeld,
             );
           case DishLiveStatus.ready:
-            return const _LiveChip(
+            return _LiveChip(
               icon: Icons.check_circle,
               label: 'ready',
-              color: Color(0xFF10B981),
+              color: c.success,
             );
         }
       },
@@ -342,25 +346,25 @@ class BottleneckBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(bottom: kSpaceMd),
+      padding: const EdgeInsets.symmetric(horizontal: kSpaceMd, vertical: kSpaceMd),
       decoration: BoxDecoration(
-        color: const Color(0xFFEF4444).withValues(alpha: 0.14),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+        color: c.danger.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(kRadiusLg),
+        border: Border.all(color: c.danger.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: <Widget>[
-          const Icon(Icons.warning_amber_rounded,
-              size: 18, color: Color(0xFFEF4444)),
-          const SizedBox(width: 8),
+          Icon(Icons.warning_amber_rounded, size: 18, color: c.danger),
+          const SizedBox(width: kSpaceSm),
           Expanded(
             child: Text(
               '$stationName is the bottleneck (+${lateMins}m). Batch or add a '
               'second.',
-              style: const TextStyle(color: Colors.white, fontSize: 13),
+              style: TextStyle(color: c.textPrimary, fontSize: kFontMd),
             ),
           ),
         ],

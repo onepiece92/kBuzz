@@ -23,65 +23,80 @@ class QueuePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Fire next')),
-      body: BlocBuilder<DemoDataCubit, DemoDataState>(
-        builder: (BuildContext context, DemoDataState state) {
-          if (state.data == null) {
-            return const BoardEmptyState(
-              icon: Icons.local_fire_department_outlined,
-              title: 'Fire order',
+      body: NestedScrollView(
+        floatHeaderSlivers: true,
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) =>
+            <Widget>[
+              SliverAppBar(
+                title: const Text('Fire next'),
+                floating: true,
+                snap: true,
+                forceElevated: innerBoxIsScrolled,
+              ),
+            ],
+        body: BlocBuilder<DemoDataCubit, DemoDataState>(
+          builder: (BuildContext context, DemoDataState state) {
+            if (state.data == null) {
+              return const BoardEmptyState(
+                icon: Icons.local_fire_department_outlined,
+                title: 'Fire order',
+              );
+            }
+            final BoardData board = BoardData.from(
+              state.data!,
+              now: state.generatedAt!,
+              fireImmediately: context
+                  .watch<SettingsCubit>()
+                  .state
+                  .fireImmediately,
             );
-          }
-          final BoardData board = BoardData.from(
-            state.data!,
-            now: state.generatedAt!,
-            fireImmediately:
-                context.watch<SettingsCubit>().state.fireImmediately,
-          );
-          final Bottleneck? bottleneck = board.schedule.bottleneck;
-          // Re-filter every tick so served cooks fall off the queue live.
-          return BlocBuilder<ServiceClockCubit, ServiceClockState>(
-            builder: (BuildContext context, ServiceClockState clock) {
-              final List<ScheduledDish> fireOrder = board.fireOrder
-                  .where((ScheduledDish d) => !dishServed(
+            final Bottleneck? bottleneck = board.schedule.bottleneck;
+            // Re-filter every tick so served cooks fall off the queue live.
+            return BlocBuilder<ServiceClockCubit, ServiceClockState>(
+              builder: (BuildContext context, ServiceClockState clock) {
+                final List<ScheduledDish> fireOrder = board.fireOrder
+                    .where(
+                      (ScheduledDish d) => !dishServed(
                         d,
                         board.statusForKot,
                         clock.elapsedMins,
                         started: clock.started,
                         retainMins: config.retainMins,
-                      ))
-                  .toList(growable: false);
-              return ListView(
-                padding: const EdgeInsets.all(16),
-                children: <Widget>[
-                  if (bottleneck != null)
-                    BottleneckBanner(
-                      stationName: board.stationOf(bottleneck.stationId)?.name ??
-                          bottleneck.stationId,
-                      lateMins: bottleneck.lateMins,
-                    ),
-                  for (int i = 0; i < fireOrder.length; i++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child:
-                          _FireRow(rank: i + 1, dish: fireOrder[i], board: board),
-                    ),
-                ],
-              );
-            },
-          );
-        },
+                      ),
+                    )
+                    .toList(growable: false);
+                return ListView(
+                  padding: const EdgeInsets.all(kSpaceLg),
+                  children: <Widget>[
+                    if (bottleneck != null)
+                      BottleneckBanner(
+                        stationName:
+                            board.stationOf(bottleneck.stationId)?.name ??
+                            bottleneck.stationId,
+                        lateMins: bottleneck.lateMins,
+                      ),
+                    for (int i = 0; i < fireOrder.length; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: kSpaceSm),
+                        child: _FireRow(
+                          rank: i + 1,
+                          dish: fireOrder[i],
+                          board: board,
+                        ),
+                      ),
+                  ],
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }
 }
 
 class _FireRow extends StatelessWidget {
-  const _FireRow({
-    required this.rank,
-    required this.dish,
-    required this.board,
-  });
+  const _FireRow({required this.rank, required this.dish, required this.board});
 
   final int rank;
   final ScheduledDish dish;
@@ -89,13 +104,17 @@ class _FireRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final station = board.stationOf(dish.stationId);
     final Color? color = station == null ? null : Color(station.color);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpaceMd,
+        vertical: kSpaceMd,
+      ),
       decoration: BoxDecoration(
-        color: KBuzzColors.surface,
-        borderRadius: BorderRadius.circular(10),
+        color: c.surface,
+        borderRadius: BorderRadius.circular(kRadiusLg),
       ),
       child: Row(
         children: <Widget>[
@@ -104,12 +123,12 @@ class _FireRow extends StatelessWidget {
             child: Text(
               '$rank',
               style: kMonoNumberStyle.copyWith(
-                color: KBuzzColors.brandPrimary,
-                fontSize: 14,
+                color: c.brand,
+                fontSize: kFontMd,
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: kSpaceSm),
           Expanded(
             child: ScheduledDishRow(
               dish: dish,

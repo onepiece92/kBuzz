@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -125,6 +126,31 @@ void main() {
       cubit.stream.listen((_) => emissions++);
 
       cubit.setAnnounceEnabled(true); // already the default
+      await Future<void>.delayed(Duration.zero);
+      expect(emissions, 0);
+    });
+
+    test('themeMode defaults to dark; setThemeMode persists and reloads',
+        () async {
+      SharedPreferences.setMockInitialValues(<String, Object>{});
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      final SettingsCubit cubit = SettingsCubit(prefs: prefs);
+      expect(cubit.state.themeMode, ThemeMode.dark); // neon board by default
+
+      cubit.setThemeMode(ThemeMode.light);
+      expect(cubit.state.themeMode, ThemeMode.light);
+      expect(prefs.getInt('themeMode'), ThemeMode.light.index);
+
+      // A fresh cubit over the same store keeps the light theme.
+      expect(SettingsCubit(prefs: prefs).state.themeMode, ThemeMode.light);
+    });
+
+    test('setThemeMode is a no-op when the value is unchanged', () async {
+      final SettingsCubit cubit = SettingsCubit();
+      int emissions = 0;
+      cubit.stream.listen((_) => emissions++);
+
+      cubit.setThemeMode(ThemeMode.dark); // already the default
       await Future<void>.delayed(Duration.zero);
       expect(emissions, 0);
     });

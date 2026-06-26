@@ -22,21 +22,32 @@ class ProfilePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: const <Widget>[
-            _SettingsCard(),
-            SizedBox(height: 16),
-            _DemoDataCard(),
-            SizedBox(height: 16),
-            _ApiKeyCard(),
-            SizedBox(height: 16),
-            _ScanTestCard(),
-            SizedBox(height: 16),
-            _SponsorsCard(),
-          ],
+      body: NestedScrollView(
+        floatHeaderSlivers: true,
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) =>
+            <Widget>[
+              SliverAppBar(
+                title: const Text('Profile'),
+                floating: true,
+                snap: true,
+                forceElevated: innerBoxIsScrolled,
+              ),
+            ],
+        body: SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.all(kSpaceLg),
+            children: const <Widget>[
+              _SettingsCard(),
+              SizedBox(height: kSpaceLg),
+              _DemoDataCard(),
+              SizedBox(height: kSpaceLg),
+              _ApiKeyCard(),
+              SizedBox(height: kSpaceLg),
+              _ScanTestCard(),
+              SizedBox(height: kSpaceLg),
+              _SponsorsCard(),
+            ],
+          ),
         ),
       ),
     );
@@ -50,35 +61,35 @@ class _SettingsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Card(
-      color: KBuzzColors.surface,
+      color: c.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpaceLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Row(
+            Row(
               children: <Widget>[
-                Icon(
-                  Icons.local_fire_department,
-                  size: 18,
-                  color: KBuzzColors.brandPrimary,
-                ),
-                SizedBox(width: 8),
-                Text(
+                Icon(Icons.local_fire_department, size: 18, color: c.brand),
+                const SizedBox(width: kSpaceSm),
+                const Text(
                   'Fire toast display time',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: kFontLg,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: kSpaceXs),
+            Text(
               'How long a “fire next” alert stays on screen before it '
               'auto-dismisses. It also clears when a newer fire arrives or the '
               'run is paused.',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: kSpaceLg),
             BlocBuilder<SettingsCubit, SettingsState>(
               builder: (BuildContext context, SettingsState state) {
                 return Wrap(
@@ -97,24 +108,25 @@ class _SettingsCard extends StatelessWidget {
                 );
               },
             ),
-            const SizedBox(height: 8),
-            const Divider(color: Colors.white12, height: 1),
-            const SizedBox(height: 4),
+            const SizedBox(height: kSpaceSm),
+            Divider(color: c.hairline, height: 1),
+            const SizedBox(height: kSpaceXs),
             BlocBuilder<SettingsCubit, SettingsState>(
               builder: (BuildContext context, SettingsState state) => Row(
                 children: <Widget>[
                   Icon(
-                    state.announceEnabled
-                        ? Icons.volume_up
-                        : Icons.volume_off,
+                    state.announceEnabled ? Icons.volume_up : Icons.volume_off,
                     size: 18,
-                    color: KBuzzColors.brandPrimary,
+                    color: c.brand,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: kSpaceSm),
                   const Expanded(
                     child: Text(
                       'Read fires aloud',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: kFontMd,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   Switch(
@@ -126,44 +138,89 @@ class _SettingsCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            const Divider(color: Colors.white12, height: 1),
-            const SizedBox(height: 4),
+            const SizedBox(height: kSpaceSm),
+            Divider(color: c.hairline, height: 1),
+            const SizedBox(height: kSpaceXs),
             BlocBuilder<SettingsCubit, SettingsState>(
               builder: (BuildContext context, SettingsState state) => Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Row(
                     children: <Widget>[
-                      const Icon(Icons.timer_outlined,
-                          size: 18, color: KBuzzColors.brandPrimary),
-                      const SizedBox(width: 8),
+                      Icon(Icons.timer_outlined, size: 18, color: c.brand),
+                      const SizedBox(width: kSpaceSm),
                       const Expanded(
                         child: Text(
                           'Start cooking immediately',
                           style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.w600),
+                            fontSize: kFontMd,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                       Switch(
                         key: const Key('fireImmediatelyToggle'),
                         value: state.fireImmediately,
-                        onChanged: (bool v) => context
-                            .read<SettingsCubit>()
-                            .setFireImmediately(v),
+                        onChanged: (bool v) =>
+                            context.read<SettingsCubit>().setFireImmediately(v),
                       ),
                     ],
                   ),
                   Text(
                     state.fireImmediately
                         ? 'Every dish fires as soon as its station is free — '
-                            'stations start right away.'
+                              'stations start right away.'
                         : 'Just-in-time: each dish starts so it’s ready exactly '
-                            'when due, so a station may sit idle first.',
-                    style: const TextStyle(color: Colors.white54, fontSize: 12),
+                              'when due, so a station may sit idle first.',
+                    style: TextStyle(color: c.textMuted, fontSize: kFontSm),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(height: kSpaceSm),
+            Divider(color: c.hairline, height: 1),
+            const SizedBox(height: kSpaceXs),
+            Row(
+              children: <Widget>[
+                Icon(Icons.palette_outlined, size: 18, color: c.brand),
+                const SizedBox(width: kSpaceSm),
+                const Expanded(
+                  child: Text(
+                    'Theme',
+                    style: TextStyle(
+                      fontSize: kFontMd,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: kSpaceSm),
+            BlocBuilder<SettingsCubit, SettingsState>(
+              builder: (BuildContext context, SettingsState state) {
+                final SettingsCubit cubit = context.read<SettingsCubit>();
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _ThemeChip(
+                      label: 'System',
+                      selected: state.themeMode == ThemeMode.system,
+                      onTap: () => cubit.setThemeMode(ThemeMode.system),
+                    ),
+                    _ThemeChip(
+                      label: 'Light',
+                      selected: state.themeMode == ThemeMode.light,
+                      onTap: () => cubit.setThemeMode(ThemeMode.light),
+                    ),
+                    _ThemeChip(
+                      label: 'Dark',
+                      selected: state.themeMode == ThemeMode.dark,
+                      onTap: () => cubit.setThemeMode(ThemeMode.dark),
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -186,17 +243,48 @@ class _PresetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return ChoiceChip(
       label: Text(preset.label),
       selected: selected,
       showCheckmark: false,
-      backgroundColor: KBuzzColors.board,
-      selectedColor: KBuzzColors.brandPrimary,
-      side: BorderSide(
-        color: selected ? KBuzzColors.brandPrimary : Colors.white24,
-      ),
+      backgroundColor: c.board,
+      selectedColor: c.brand,
+      side: BorderSide(color: selected ? c.brand : c.hairlineStrong),
       labelStyle: TextStyle(
-        color: selected ? Colors.white : Colors.white70,
+        color: selected ? Colors.white : c.textSecondary,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      ),
+      onSelected: (_) => onTap(),
+    );
+  }
+}
+
+/// A selectable theme-mode chip (System / Light / Dark), styled like
+/// [_PresetChip].
+class _ThemeChip extends StatelessWidget {
+  const _ThemeChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      backgroundColor: c.board,
+      selectedColor: c.brand,
+      side: BorderSide(color: selected ? c.brand : c.hairlineStrong),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : c.textSecondary,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
       ),
       onSelected: (_) => onTap(),
@@ -252,31 +340,35 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Card(
-      color: KBuzzColors.surface,
+      color: c.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpaceLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Row(
+            Row(
               children: <Widget>[
-                Icon(Icons.key, size: 18, color: KBuzzColors.brandPrimary),
-                SizedBox(width: 8),
-                Text(
+                Icon(Icons.key, size: 18, color: c.brand),
+                const SizedBox(width: kSpaceSm),
+                const Text(
                   'Claude API key',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: kFontLg,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: kSpaceXs),
+            Text(
               'Powers scanning a ticket photo and AI demo-data generation. '
               'Stored on this device only; leave blank to use manual entry and '
               'the built-in sample.',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: kSpaceMd),
             TextField(
               controller: _controller,
               obscureText: _obscure,
@@ -288,14 +380,15 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(
-                      _obscure ? Icons.visibility : Icons.visibility_off,
-                      size: 20),
+                    _obscure ? Icons.visibility : Icons.visibility_off,
+                    size: 20,
+                  ),
                   onPressed: () => setState(() => _obscure = !_obscure),
                   tooltip: _obscure ? 'Show' : 'Hide',
                 ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: kSpaceMd),
             Row(
               children: <Widget>[
                 BlocBuilder<SettingsCubit, SettingsState>(
@@ -306,18 +399,16 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
                             ? Icons.check_circle
                             : Icons.info_outline,
                         size: 16,
-                        color: state.aiConfigured
-                            ? const Color(0xFF34D399)
-                            : Colors.white38,
+                        color: state.aiConfigured ? c.expoReady : c.textFaint,
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: kSpaceSm),
                       Text(
-                        state.aiConfigured ? 'AI features on' : 'AI features off',
+                        state.aiConfigured
+                            ? 'AI features on'
+                            : 'AI features off',
                         style: TextStyle(
-                          color: state.aiConfigured
-                              ? const Color(0xFF34D399)
-                              : Colors.white54,
-                          fontSize: 13,
+                          color: state.aiConfigured ? c.expoReady : c.textMuted,
+                          fontSize: kFontMd,
                         ),
                       ),
                     ],
@@ -325,7 +416,7 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
                 ),
                 const Spacer(),
                 TextButton(onPressed: _getKey, child: const Text('Get a key')),
-                const SizedBox(width: 4),
+                const SizedBox(width: kSpaceXs),
                 FilledButton(onPressed: _save, child: const Text('Save')),
               ],
             ),
@@ -374,10 +465,11 @@ class _DemoDataCard extends StatelessWidget {
     // is the same live truth (in-app key or build-time fallback).
     final bool aiEnabled = context.watch<SettingsCubit>().state.aiConfigured;
     final String provider = context.read<DemoDataCubit>().aiProvider;
+    final KdsColors c = KdsColors.of(context);
     return Card(
-      color: KBuzzColors.surface,
+      color: c.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpaceLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -385,13 +477,16 @@ class _DemoDataCard extends StatelessWidget {
               children: <Widget>[
                 const Text(
                   'Demo data',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: kFontLg,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const Spacer(),
                 _AiBadge(enabled: aiEnabled, provider: provider),
               ],
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: kSpaceXs),
             Text(
               aiEnabled
                   ? 'Generate a brand-new restaurant and dinner rush with '
@@ -399,9 +494,9 @@ class _DemoDataCard extends StatelessWidget {
                   : 'Seed the prototype sample rush so you can test the boards. '
                         'For a fresh AI dataset every time, add a Claude key '
                         'in the “Claude API key” section below.',
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: kSpaceLg),
             BlocBuilder<DemoDataCubit, DemoDataState>(
               builder: (BuildContext context, DemoDataState state) {
                 final bool busy = state.generating;
@@ -435,7 +530,7 @@ class _DemoDataCard extends StatelessWidget {
                           ),
                         ),
                         if (state.hasData) ...<Widget>[
-                          const SizedBox(width: 8),
+                          const SizedBox(width: kSpaceSm),
                           IconButton(
                             tooltip: 'Clear demo data',
                             onPressed: busy
@@ -453,7 +548,7 @@ class _DemoDataCard extends StatelessWidget {
                       ],
                     ),
                     if (state.data != null) ...<Widget>[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: kSpaceLg),
                       _DemoSummary(data: state.data!),
                     ],
                   ],
@@ -479,14 +574,16 @@ class _AiBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color color = enabled
-        ? const Color(0xFF10B981)
-        : const Color(0xFFF59E0B);
+    final KdsColors c = KdsColors.of(context);
+    final Color color = enabled ? c.success : c.slackCook;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpaceSm,
+        vertical: kSpaceXs,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(kRadiusPill),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -496,12 +593,12 @@ class _AiBadge extends StatelessWidget {
             size: 12,
             color: color,
           ),
-          const SizedBox(width: 5),
+          const SizedBox(width: kSpaceXs),
           Text(
             enabled ? 'AI · $provider' : 'AI OFF',
             style: TextStyle(
               color: color,
-              fontSize: 11,
+              fontSize: kFontXs,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.4,
             ),
@@ -537,12 +634,12 @@ class _DemoSummary extends StatelessWidget {
             _StatChip(label: 'Stations', value: '${data.stations.length}'),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: kSpaceLg),
         const Text('Tickets', style: TextStyle(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
+        const SizedBox(height: kSpaceSm),
         for (final Kot kot in data.kots)
           Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.only(bottom: kSpaceSm),
             child: _KotTile(kot: kot, menuById: menuById),
           ),
       ],
@@ -558,24 +655,25 @@ class _StatChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: kSpaceMd,
+        vertical: kSpaceSm,
+      ),
       decoration: BoxDecoration(
-        color: KBuzzColors.board,
-        borderRadius: BorderRadius.circular(10),
+        color: c.board,
+        borderRadius: BorderRadius.circular(kRadiusLg),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           Text(
             value,
-            style: kMonoNumberStyle.copyWith(
-              color: KBuzzColors.brandPrimary,
-              fontSize: 16,
-            ),
+            style: kMonoNumberStyle.copyWith(color: c.brand, fontSize: kFontLg),
           ),
-          const SizedBox(width: 6),
-          Text(label, style: const TextStyle(color: Colors.white70)),
+          const SizedBox(width: kSpaceSm),
+          Text(label, style: TextStyle(color: c.textSecondary)),
         ],
       ),
     );
@@ -599,11 +697,12 @@ class _KotTile extends StatelessWidget {
         })
         .join(' · ');
 
+    final KdsColors c = KdsColors.of(context);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(kSpaceMd),
       decoration: BoxDecoration(
-        color: KBuzzColors.board,
-        borderRadius: BorderRadius.circular(10),
+        color: c.board,
+        borderRadius: BorderRadius.circular(kRadiusLg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -614,22 +713,28 @@ class _KotTile extends StatelessWidget {
                 'Table ${kot.table}',
                 style: const TextStyle(fontWeight: FontWeight.w700),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: kSpaceSm),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: kSpaceSm,
+                  vertical: kSpaceXs,
+                ),
                 decoration: BoxDecoration(
                   color: KBuzzColors.brandSecondary,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(kRadiusMd),
                 ),
                 child: Text(
                   kot.type.label,
-                  style: const TextStyle(fontSize: 11, color: Colors.white),
+                  style: const TextStyle(
+                    fontSize: kFontXs,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
-          Text(items, style: const TextStyle(color: Colors.white70)),
+          const SizedBox(height: kSpaceXs),
+          Text(items, style: TextStyle(color: c.textSecondary)),
         ],
       ),
     );
@@ -661,41 +766,45 @@ class _ScanTestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Card(
-      color: KBuzzColors.surface,
+      color: c.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpaceLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const Row(
+            Row(
               children: <Widget>[
-                Icon(Icons.document_scanner_outlined,
-                    size: 18, color: KBuzzColors.brandPrimary),
-                SizedBox(width: 8),
-                Text(
+                Icon(Icons.document_scanner_outlined, size: 18, color: c.brand),
+                const SizedBox(width: kSpaceSm),
+                const Text(
                   'Scan a ticket image',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  style: TextStyle(
+                    fontSize: kFontLg,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: kSpaceXs),
+            Text(
               'Drag & drop a saved KOT / receipt image onto a test page — for '
               'desktop / macOS. Needs a Claude key (above) and generated demo '
               'data to match against.',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: kSpaceMd),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: () => Navigator.of(context, rootNavigator: true).push(
-                  MaterialPageRoute<void>(
-                    builder: (BuildContext _) =>
-                        const ScanPage(dropMode: true),
-                  ),
-                ),
+                onPressed: () =>
+                    Navigator.of(context, rootNavigator: true).push(
+                      MaterialPageRoute<void>(
+                        builder: (BuildContext _) =>
+                            const ScanPage(dropMode: true),
+                      ),
+                    ),
                 icon: const Icon(Icons.image_outlined),
                 label: const Text('Open drop-to-scan page'),
               ),
@@ -720,8 +829,10 @@ class _SponsorsCardState extends State<_SponsorsCard> {
   // Start deep in a virtual range so the carousel can loop both ways smoothly;
   // the real sponsor is index % _kSponsors.length.
   static const int _initialPage = 10000;
-  late final PageController _controller =
-      PageController(initialPage: _initialPage, viewportFraction: 0.92);
+  late final PageController _controller = PageController(
+    initialPage: _initialPage,
+    viewportFraction: 0.92,
+  );
   Timer? _timer;
   int _index = 0;
 
@@ -760,23 +871,24 @@ class _SponsorsCardState extends State<_SponsorsCard> {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Card(
-      color: KBuzzColors.surface,
+      color: c.surface,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(kSpaceLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             const Text(
               'Sponsors',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: kFontLg, fontWeight: FontWeight.w700),
             ),
-            const SizedBox(height: 4),
-            const Text(
+            const SizedBox(height: kSpaceXs),
+            Text(
               'Proudly supported by — tap to visit.',
-              style: TextStyle(color: Colors.white54, fontSize: 13),
+              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: kSpaceLg),
             SizedBox(
               height: 86,
               child: PageView.builder(
@@ -786,7 +898,7 @@ class _SponsorsCardState extends State<_SponsorsCard> {
                 itemBuilder: (BuildContext context, int page) {
                   final _Sponsor sponsor = _kSponsors[page % _kSponsors.length];
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: kSpaceXs),
                     child: _SponsorBanner(
                       sponsor: sponsor,
                       onTap: () => _open(sponsor),
@@ -795,21 +907,19 @@ class _SponsorsCardState extends State<_SponsorsCard> {
                 },
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: kSpaceMd),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: <Widget>[
                 for (int i = 0; i < _kSponsors.length; i++)
                   AnimatedContainer(
                     duration: const Duration(milliseconds: 250),
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    margin: const EdgeInsets.symmetric(horizontal: kSpaceXs),
                     width: i == _index ? 18 : 6,
                     height: 6,
                     decoration: BoxDecoration(
-                      color: i == _index
-                          ? KBuzzColors.brandPrimary
-                          : Colors.white24,
-                      borderRadius: BorderRadius.circular(3),
+                      color: i == _index ? c.brand : c.hairlineStrong,
+                      borderRadius: BorderRadius.circular(kRadiusSm),
                     ),
                   ),
               ],
@@ -830,13 +940,12 @@ class _SponsorBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final String host =
-        Uri.parse(sponsor.url).host.replaceFirst('www.', '');
+    final String host = Uri.parse(sponsor.url).host.replaceFirst('www.', '');
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(kRadiusLg),
         child: Ink(
           decoration: BoxDecoration(
             gradient: const LinearGradient(
@@ -847,9 +956,12 @@ class _SponsorBanner extends StatelessWidget {
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(kRadiusLg),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          padding: const EdgeInsets.symmetric(
+            horizontal: kSpaceLg,
+            vertical: kSpaceLg,
+          ),
           child: Row(
             children: <Widget>[
               Expanded(
@@ -863,24 +975,24 @@ class _SponsorBanner extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 15,
+                        fontSize: kFontMd,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: kSpaceXs),
                     Text(
                       host,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
                         color: Colors.white70,
-                        fontSize: 12,
+                        fontSize: kFontSm,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: kSpaceSm),
               const Icon(Icons.open_in_new, color: Colors.white, size: 18),
             ],
           ),

@@ -22,7 +22,11 @@ void main() {
           BlocProvider<ServiceClockCubit>.value(value: clock),
           BlocProvider<SettingsCubit>(create: (_) => SettingsCubit()),
         ],
-        child: const MaterialApp(home: StationsPage()),
+        // TickerMode off so the bar-name marquee sits still (pumpAndSettle
+        // would never settle against a forever-looping animation).
+        child: const MaterialApp(
+          home: TickerMode(enabled: false, child: StationsPage()),
+        ),
       ),
     );
     await tester.pumpAndSettle();

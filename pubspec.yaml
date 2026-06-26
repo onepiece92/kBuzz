@@ -100,6 +100,16 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Bundled (offline-first, §0.1) JetBrains Mono — used for special-instruction
+  # notes; monospace makes short notes easier to read at a glance. OFL-1.1
+  # (assets/fonts/OFL.txt).
+  fonts:
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

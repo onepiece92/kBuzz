@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:kbuzz/app/theme.dart';
 
 /// Placeholder body for screens whose feature lands in a later milestone.
 ///
@@ -18,20 +19,21 @@ class ComingSoon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ThemeData theme = Theme.of(context);
+    final KdsColors c = KdsColors.of(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: const EdgeInsets.symmetric(horizontal: kSpaceXxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             Icon(icon, size: 48, color: theme.colorScheme.primary),
-            const SizedBox(height: 12),
+            const SizedBox(height: kSpaceMd),
             Text(title, style: theme.textTheme.titleLarge),
-            const SizedBox(height: 4),
+            const SizedBox(height: kSpaceXs),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(color: Colors.white54),
+              style: theme.textTheme.bodySmall?.copyWith(color: c.textMuted),
             ),
           ],
         ),

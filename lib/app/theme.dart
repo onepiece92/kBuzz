@@ -7,8 +7,8 @@ import 'package:flutter/material.dart';
 /// separate — never swap one for the other.
 abstract final class KBuzzColors {
   /// Brand primary (orange). Drives primary actions, the scan shutter and
-  /// CTA / selected accents.
-  static const Color brandPrimary = Color(0xFFFF6600);
+  /// CTA / selected accents. (theme.md "Primary Brand" neon.)
+  static const Color brandPrimary = Color(0xFFFF7A1A);
 
   /// Brand secondary (navy). Branded chrome only (app bar, sign-in, elevated
   /// surfaces) — not text/fills on the near-black board, where contrast is too
@@ -44,10 +44,238 @@ const Map<String, Color> kStationColors = <String, Color>{
 /// Distinct from the kitchen-side *slack* palette in `board_widgets.dart`
 /// (planned hold/late/on-time), which encodes scheduler slack rather than expo
 /// state — keep the two separate.
-const Color kStatusReady = Color(0xFF34D399); // green — all lines plated/ready
+const Color kStatusReady = Color(0xFF39FF88); // neon green — all lines plated/ready
 const Color kStatusHeld = Color(0xFFFBBF24); // amber — held / special note
-const Color kStatusLate = Color(0xFFF87171); // red — past target
+const Color kStatusLate = Color(0xFFFF4D6D); // neon red — past target
 const Color kStatusFiring = KBuzzColors.brandPrimary; // orange — rush / firing
+
+/// Kitchen "slack / live" palette — the kitchen-side colours for a cook's timing
+/// and shared accents (distinct from the waiter-side expo palette above). These
+/// are the single source of truth for the boards' status colours; retheme here.
+const Color kDanger = Color(0xFFFF4D6D); // neon red — late / bottleneck / error
+const Color kSlackHold = Color(0xFF33A1FF); // neon blue — can hold
+const Color kSuccess = Color(0xFF39FF88); // neon green — on time / ready / success
+const Color kSlackCook = Color(0xFFFFD60A); // neon amber — cooking
+const Color kHoldStripe = Color(0xFFFDE68A); // pale amber — holding edge marker
+const Color kSwatchGrey = Color(0xFF94A3B8); // neutral legend swatch
+
+// ── Pastel palette (light theme) ──────────────────────────────────────────
+// theme.md's pastels are tuned as fills; for foreground/border/text accents on a
+// light background we use the slightly stronger "standard" shades so contrast
+// holds. Light-mode neutrals (below, in [KdsColors.pastel]) are dark-on-light.
+const Color _pastelBrand = Color(0xFFF97316);
+const Color _pastelReady = Color(0xFF22C55E);
+const Color _pastelHeld = Color(0xFFD97706);
+const Color _pastelLate = Color(0xFFEF4444);
+const Color _pastelInfo = Color(0xFF3B82F6);
+const Color _pastelCook = Color(0xFFF59E0B);
+const Color _pastelSuccess = Color(0xFF16A34A);
+const Color _pastelHoldStripe = Color(0xFFF59E0B);
+const Color _pastelGrey = Color(0xFF94A3B8);
+
+/// Theme-aware colour set. Every colour that differs between the neon (dark) and
+/// pastel (light) themes is a field here; read it with `KdsColors.of(context)`.
+/// Station fills ([kStationColors]) and the white bar-label text stay constant
+/// across themes (the saturated station fills carry white text in both).
+///
+/// The top-level `k*` tokens above are the neon values and remain the dark
+/// fallback for any call site not yet migrated to [of].
+@immutable
+class KdsColors extends ThemeExtension<KdsColors> {
+  const KdsColors({
+    required this.brand,
+    required this.expoReady,
+    required this.expoHeld,
+    required this.expoLate,
+    required this.danger,
+    required this.slackHold,
+    required this.slackCook,
+    required this.success,
+    required this.holdStripe,
+    required this.swatchGrey,
+    required this.board,
+    required this.surface,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textMuted,
+    required this.textFaint,
+    required this.hairline,
+    required this.hairlineStrong,
+    required this.scrim,
+  });
+
+  final Color brand; // CTA / firing / rush accent
+  final Color expoReady; // waiter: all lines plated
+  final Color expoHeld; // waiter: held / special note
+  final Color expoLate; // waiter: past target
+  final Color danger; // kitchen: late / bottleneck / error
+  final Color slackHold; // kitchen: can hold
+  final Color slackCook; // kitchen: cooking
+  final Color success; // kitchen: on time / ready
+  final Color holdStripe; // holding edge marker
+  final Color swatchGrey; // neutral legend swatch
+  final Color board; // scaffold background
+  final Color surface; // raised surface / cards
+  final Color textPrimary; // primary text
+  final Color textSecondary; // secondary text
+  final Color textMuted; // muted / caption text
+  final Color textFaint; // faint / disabled text
+  final Color hairline; // thin divider / border
+  final Color hairlineStrong; // stronger divider / border
+  final Color scrim; // shadow / overlay
+
+  /// Neon palette — the dark KDS board.
+  static const KdsColors neon = KdsColors(
+    brand: kStatusFiring,
+    expoReady: kStatusReady,
+    expoHeld: kStatusHeld,
+    expoLate: kStatusLate,
+    danger: kDanger,
+    slackHold: kSlackHold,
+    slackCook: kSlackCook,
+    success: kSuccess,
+    holdStripe: kHoldStripe,
+    swatchGrey: kSwatchGrey,
+    board: KBuzzColors.board,
+    surface: KBuzzColors.surface,
+    textPrimary: Colors.white,
+    textSecondary: Colors.white70,
+    textMuted: Colors.white54,
+    textFaint: Colors.white38,
+    hairline: Colors.white12,
+    hairlineStrong: Colors.white24,
+    scrim: Color(0x66000000),
+  );
+
+  /// Pastel palette — the light theme.
+  static const KdsColors pastel = KdsColors(
+    brand: _pastelBrand,
+    expoReady: _pastelReady,
+    expoHeld: _pastelHeld,
+    expoLate: _pastelLate,
+    danger: _pastelLate,
+    slackHold: _pastelInfo,
+    slackCook: _pastelCook,
+    success: _pastelSuccess,
+    holdStripe: _pastelHoldStripe,
+    swatchGrey: _pastelGrey,
+    board: Color(0xFFF8FAFC),
+    surface: Color(0xFFFFFFFF),
+    textPrimary: Color(0xFF0F172A),
+    textSecondary: Color(0xFF334155),
+    textMuted: Color(0xFF64748B),
+    textFaint: Color(0xFF94A3B8),
+    hairline: Color(0xFFE2E8F0),
+    hairlineStrong: Color(0xFFCBD5E1),
+    scrim: Color(0x14000000),
+  );
+
+  /// The active set for [context]; falls back to [neon] if unset.
+  static KdsColors of(BuildContext context) =>
+      Theme.of(context).extension<KdsColors>() ?? neon;
+
+  @override
+  KdsColors copyWith({
+    Color? brand,
+    Color? expoReady,
+    Color? expoHeld,
+    Color? expoLate,
+    Color? danger,
+    Color? slackHold,
+    Color? slackCook,
+    Color? success,
+    Color? holdStripe,
+    Color? swatchGrey,
+    Color? board,
+    Color? surface,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? textMuted,
+    Color? textFaint,
+    Color? hairline,
+    Color? hairlineStrong,
+    Color? scrim,
+  }) =>
+      KdsColors(
+        brand: brand ?? this.brand,
+        expoReady: expoReady ?? this.expoReady,
+        expoHeld: expoHeld ?? this.expoHeld,
+        expoLate: expoLate ?? this.expoLate,
+        danger: danger ?? this.danger,
+        slackHold: slackHold ?? this.slackHold,
+        slackCook: slackCook ?? this.slackCook,
+        success: success ?? this.success,
+        holdStripe: holdStripe ?? this.holdStripe,
+        swatchGrey: swatchGrey ?? this.swatchGrey,
+        board: board ?? this.board,
+        surface: surface ?? this.surface,
+        textPrimary: textPrimary ?? this.textPrimary,
+        textSecondary: textSecondary ?? this.textSecondary,
+        textMuted: textMuted ?? this.textMuted,
+        textFaint: textFaint ?? this.textFaint,
+        hairline: hairline ?? this.hairline,
+        hairlineStrong: hairlineStrong ?? this.hairlineStrong,
+        scrim: scrim ?? this.scrim,
+      );
+
+  @override
+  KdsColors lerp(ThemeExtension<KdsColors>? other, double t) {
+    if (other is! KdsColors) return this;
+    return KdsColors(
+      brand: Color.lerp(brand, other.brand, t)!,
+      expoReady: Color.lerp(expoReady, other.expoReady, t)!,
+      expoHeld: Color.lerp(expoHeld, other.expoHeld, t)!,
+      expoLate: Color.lerp(expoLate, other.expoLate, t)!,
+      danger: Color.lerp(danger, other.danger, t)!,
+      slackHold: Color.lerp(slackHold, other.slackHold, t)!,
+      slackCook: Color.lerp(slackCook, other.slackCook, t)!,
+      success: Color.lerp(success, other.success, t)!,
+      holdStripe: Color.lerp(holdStripe, other.holdStripe, t)!,
+      swatchGrey: Color.lerp(swatchGrey, other.swatchGrey, t)!,
+      board: Color.lerp(board, other.board, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
+      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
+      textFaint: Color.lerp(textFaint, other.textFaint, t)!,
+      hairline: Color.lerp(hairline, other.hairline, t)!,
+      hairlineStrong: Color.lerp(hairlineStrong, other.hairlineStrong, t)!,
+      scrim: Color.lerp(scrim, other.scrim, t)!,
+    );
+  }
+}
+
+/// Spacing scale (4-pt grid). Use these for gaps and padding so the whole app's
+/// rhythm is tunable from one place. Snap any new gap to the nearest step.
+const double kSpaceXs = 4;
+const double kSpaceSm = 8;
+const double kSpaceMd = 12;
+const double kSpaceLg = 16;
+const double kSpaceXl = 24;
+const double kSpaceXxl = 32;
+
+/// Corner-radius scale. `kRadiusPill` is for chip/pill shapes.
+const double kRadiusSm = 4;
+const double kRadiusMd = 8;
+const double kRadiusLg = 12;
+const double kRadiusXl = 16;
+const double kRadiusPill = 20;
+
+/// Type-size scale. Snap any text size to a step so the whole type ramp is
+/// tunable from one place. (`kFontMicro`/`kFontXs` are the dense-board sizes.)
+const double kFontMicro = 9;
+const double kFontXs = 11;
+const double kFontSm = 12;
+const double kFontMd = 14;
+const double kFontLg = 16;
+const double kFontXl = 20;
+const double kFontXxl = 28;
+
+/// Bundled JetBrains Mono — used for special-instruction notes. Its monospace
+/// shapes make short notes ("no nuts", "extra spicy") easier to read at a glance
+/// than the sans-serif name above them. Declared in `pubspec.yaml` (`fonts:`),
+/// files in `assets/fonts/` (OFL-1.1).
+const String kJetBrainsMono = 'JetBrainsMono';
 
 /// Monospace style for all clocks, timers and quantities (AGENTS.md §12).
 const TextStyle kMonoNumberStyle = TextStyle(
@@ -56,31 +284,42 @@ const TextStyle kMonoNumberStyle = TextStyle(
   fontWeight: FontWeight.w600,
 );
 
-/// Builds the single dark KDS theme.
-ThemeData buildKBuzzTheme() {
-  final ColorScheme scheme = const ColorScheme.dark().copyWith(
-    primary: KBuzzColors.brandPrimary,
+/// Builds a KDS theme for [brightness] — neon on the dark board, pastel on the
+/// light surface. The matching [KdsColors] set is attached as a theme extension
+/// so widgets resolve their colours with `KdsColors.of(context)`.
+ThemeData buildKBuzzTheme(Brightness brightness) {
+  final bool dark = brightness == Brightness.dark;
+  final KdsColors kc = dark ? KdsColors.neon : KdsColors.pastel;
+  final ColorScheme scheme =
+      (dark ? const ColorScheme.dark() : const ColorScheme.light()).copyWith(
+    primary: kc.brand,
     onPrimary: Colors.white,
     secondary: KBuzzColors.brandSecondary,
-    surface: KBuzzColors.surface,
+    surface: kc.surface,
+    onSurface: kc.textPrimary,
   );
 
   return ThemeData(
     useMaterial3: true,
-    brightness: Brightness.dark,
+    brightness: brightness,
     colorScheme: scheme,
-    scaffoldBackgroundColor: KBuzzColors.board,
-    appBarTheme: const AppBarTheme(
-      backgroundColor: KBuzzColors.board,
-      foregroundColor: Colors.white,
+    scaffoldBackgroundColor: kc.board,
+    extensions: <ThemeExtension<dynamic>>[kc],
+    appBarTheme: AppBarTheme(
+      backgroundColor: kc.board,
+      foregroundColor: kc.textPrimary,
       elevation: 0,
       centerTitle: false,
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: KBuzzColors.surface,
-      indicatorColor: KBuzzColors.brandPrimary.withValues(alpha: 0.18),
+      backgroundColor: kc.surface,
+      indicatorColor: kc.brand.withValues(alpha: 0.18),
       labelTextStyle: WidgetStateProperty.all(
-        const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        TextStyle(
+          fontSize: kFontSm,
+          fontWeight: FontWeight.w600,
+          color: kc.textSecondary,
+        ),
       ),
     ),
   );

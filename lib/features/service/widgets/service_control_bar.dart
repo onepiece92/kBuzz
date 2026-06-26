@@ -14,9 +14,10 @@ class ServiceControlBar extends StatelessWidget {
     final ServiceClockCubit cubit = context.read<ServiceClockCubit>();
     return BlocBuilder<ServiceClockCubit, ServiceClockState>(
       builder: (BuildContext context, ServiceClockState state) {
+        final KdsColors c = KdsColors.of(context);
         return Container(
-          color: KBuzzColors.surface,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          color: c.surface,
+          padding: const EdgeInsets.symmetric(horizontal: kSpaceMd, vertical: kSpaceSm),
           child: Row(
             children: <Widget>[
               if (!state.started)
@@ -24,7 +25,7 @@ class ServiceControlBar extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: cubit.start,
                     style: FilledButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
+                      backgroundColor: c.success,
                     ),
                     icon: const Icon(Icons.play_arrow, size: 18),
                     label: const Text('Start service'),
@@ -32,7 +33,7 @@ class ServiceControlBar extends StatelessWidget {
                 )
               else ...<Widget>[
                 _ElapsedReadout(elapsed: state.elapsed),
-                const SizedBox(width: 8),
+                const SizedBox(width: kSpaceSm),
                 IconButton(
                   tooltip: state.running ? 'Pause' : 'Resume',
                   onPressed: cubit.toggle,
@@ -61,14 +62,15 @@ class _ElapsedReadout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final int totalSeconds = elapsed.inSeconds;
     final String mm = (totalSeconds ~/ 60).toString().padLeft(2, '0');
     final String ss = (totalSeconds % 60).toString().padLeft(2, '0');
     return Text(
       '$mm:$ss',
       style: kMonoNumberStyle.copyWith(
-        color: KBuzzColors.brandPrimary,
-        fontSize: 16,
+        color: c.brand,
+        fontSize: kFontLg,
       ),
     );
   }
@@ -82,12 +84,13 @@ class _SpeedToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: KBuzzColors.board,
-        borderRadius: BorderRadius.circular(8),
+        color: c.board,
+        borderRadius: BorderRadius.circular(kRadiusMd),
       ),
-      padding: const EdgeInsets.all(2),
+      padding: const EdgeInsets.all(kSpaceXs),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
@@ -96,18 +99,18 @@ class _SpeedToggle extends StatelessWidget {
               onTap: () => onChanged(s),
               child: Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    const EdgeInsets.symmetric(horizontal: kSpaceMd, vertical: kSpaceXs),
                 decoration: BoxDecoration(
                   color: s == speed
-                      ? KBuzzColors.brandPrimary
+                      ? c.brand
                       : Colors.transparent,
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(kRadiusMd),
                 ),
                 child: Text(
                   '${s}x',
                   style: kMonoNumberStyle.copyWith(
-                    color: s == speed ? Colors.white : Colors.white54,
-                    fontSize: 12,
+                    color: s == speed ? Colors.white : c.textMuted,
+                    fontSize: kFontSm,
                   ),
                 ),
               ),

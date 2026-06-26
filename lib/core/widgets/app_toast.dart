@@ -53,14 +53,16 @@ abstract final class AppToast {
     Duration duration = const Duration(seconds: 3),
     String? note,
   }) {
+    final KdsColors c = KdsColors.of(context);
+    final Color accent = type.accentOf(c);
     _insert(
       context,
-      accent: type.accent,
+      accent: accent,
       duration: duration,
       child: _MessageContent(
         icon: type.icon,
         message: message,
-        accent: type.accent,
+        accent: accent,
         note: note,
       ),
     );
@@ -123,7 +125,7 @@ abstract final class AppToast {
     if (swap != null && swap(_FireContent(items: items, note: note))) return;
     _insert(
       context,
-      accent: KBuzzColors.brandPrimary,
+      accent: KdsColors.of(context).brand,
       duration: duration,
       showClose: true,
       retimeable: true,
@@ -173,14 +175,21 @@ abstract final class AppToast {
 
 /// Severity of a toast — drives its accent colour and leading icon.
 enum AppToastType {
-  info(KBuzzColors.brandPrimary, Icons.info_outline),
-  success(Color(0xFF10B981), Icons.check_circle_outline),
-  error(Color(0xFFEF4444), Icons.error_outline);
+  info(Icons.info_outline),
+  success(Icons.check_circle_outline),
+  error(Icons.error_outline);
 
-  const AppToastType(this.accent, this.icon);
+  const AppToastType(this.icon);
 
-  final Color accent;
   final IconData icon;
+
+  /// Resolve this severity's theme-aware accent colour. An enum constant can't
+  /// hold a [KdsColors] field, so the colour is mapped from the active set here.
+  Color accentOf(KdsColors c) => switch (this) {
+        AppToastType.info => c.brand,
+        AppToastType.success => c.success,
+        AppToastType.error => c.danger,
+      };
 }
 
 /// The animated toast surface: slides down from the top edge, holds, then slides
@@ -289,6 +298,7 @@ class _AppToastViewState extends State<_AppToastView>
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Positioned(
       top: 0,
       left: 0,
@@ -300,7 +310,7 @@ class _AppToastViewState extends State<_AppToastView>
           child: FadeTransition(
             opacity: _controller,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.fromLTRB(kSpaceMd, kSpaceSm, kSpaceMd, 0),
               child: Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
@@ -313,19 +323,19 @@ class _AppToastViewState extends State<_AppToastView>
                         children: <Widget>[
                           Container(
                             decoration: BoxDecoration(
-                              color: KBuzzColors.surface,
-                              borderRadius: BorderRadius.circular(12),
+                              color: c.surface,
+                              borderRadius: BorderRadius.circular(kRadiusLg),
                               border: Border(
                                 left: BorderSide(
                                   color: widget.accent,
                                   width: 4,
                                 ),
                               ),
-                              boxShadow: const <BoxShadow>[
+                              boxShadow: <BoxShadow>[
                                 BoxShadow(
-                                  color: Color(0x66000000),
+                                  color: c.scrim,
                                   blurRadius: 16,
-                                  offset: Offset(0, 4),
+                                  offset: const Offset(0, 4),
                                 ),
                               ],
                             ),
@@ -349,7 +359,7 @@ class _AppToastViewState extends State<_AppToastView>
                                   minHeight: 36,
                                 ),
                                 splashRadius: 20,
-                                color: Colors.white60,
+                                color: c.textSecondary,
                                 tooltip: 'Dismiss',
                                 icon: const Icon(Icons.close),
                               ),
@@ -386,6 +396,7 @@ class _MessageContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final String? note = this.note;
     final bool hasNote = note != null && note.isNotEmpty;
     return Row(
@@ -393,7 +404,7 @@ class _MessageContent extends StatelessWidget {
           hasNote ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       children: <Widget>[
         Icon(icon, color: accent, size: 22),
-        const SizedBox(width: 12),
+        const SizedBox(width: kSpaceMd),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,17 +412,17 @@ class _MessageContent extends StatelessWidget {
             children: <Widget>[
               Text(
                 message,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 14,
+                style: TextStyle(
+                  color: c.textPrimary,
+                  fontSize: kFontMd,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               if (note != null && note.isNotEmpty) ...<Widget>[
-                const SizedBox(height: 2),
+                const SizedBox(height: kSpaceXs),
                 Text(
                   note,
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  style: TextStyle(color: c.textSecondary, fontSize: kFontSm),
                 ),
               ],
             ],
@@ -453,6 +464,7 @@ class _FireContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final double maxListHeight = MediaQuery.sizeOf(context).height * 0.7;
     final String? note = this.note;
     return Column(
@@ -461,12 +473,12 @@ class _FireContent extends StatelessWidget {
       children: <Widget>[
         Padding(
           // Keep the header clear of the corner ✕.
-          padding: const EdgeInsets.only(right: 28),
+          padding: const EdgeInsets.only(right: kSpaceXl),
           child: Text(
             items.length > 1 ? 'FIRE NOW · ${items.length}' : 'FIRE NOW',
-            style: const TextStyle(
-              color: KBuzzColors.brandPrimary,
-              fontSize: 11,
+            style: TextStyle(
+              color: c.brand,
+              fontSize: kFontXs,
               fontWeight: FontWeight.w800,
               letterSpacing: 1.5,
             ),
@@ -474,13 +486,13 @@ class _FireContent extends StatelessWidget {
         ),
         if (note != null && note.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 2, right: 28),
+            padding: const EdgeInsets.only(top: kSpaceXs, right: kSpaceXl),
             child: Text(
               note,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              style: TextStyle(color: c.textSecondary, fontSize: kFontSm),
             ),
           ),
-        const SizedBox(height: 6),
+        const SizedBox(height: kSpaceSm),
         ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxListHeight),
           child: SingleChildScrollView(
@@ -489,10 +501,10 @@ class _FireContent extends StatelessWidget {
               children: <Widget>[
                 for (int i = 0; i < items.length; i++) ...<Widget>[
                   if (i > 0)
-                    const Divider(
+                    Divider(
                       height: 14,
                       thickness: 1,
-                      color: Colors.white12,
+                      color: c.hairline,
                     ),
                   _FireRow(item: items[i]),
                 ],
@@ -513,11 +525,12 @@ class _FireRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: <Widget>[
-        Text(item.emoji ?? '🔥', style: const TextStyle(fontSize: 28)),
-        const SizedBox(width: 14),
+        Text(item.emoji ?? '🔥', style: const TextStyle(fontSize: kFontXxl)),
+        const SizedBox(width: kSpaceLg),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -528,14 +541,14 @@ class _FireRow extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: kMonoNumberStyle.copyWith(
-                  color: Colors.white,
-                  fontSize: 19,
+                  color: c.textPrimary,
+                  fontSize: kFontXl,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               Text(
                 item.stationName,
-                style: const TextStyle(color: Colors.white70, fontSize: 13),
+                style: TextStyle(color: c.textSecondary, fontSize: kFontMd),
               ),
             ],
           ),

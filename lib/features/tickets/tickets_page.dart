@@ -24,12 +24,9 @@ const List<String> kRecookReasons = <String>[
 /// Minutes a line may sit ready-but-unserved before the "under-lamp" warning.
 const int kReadyLimitMins = 4;
 
-// Expo status palette — single source of truth lives in theme.dart so a rebrand
-// is one edit; these short aliases keep the call sites terse.
-const Color _green = kStatusReady;
-const Color _amber = kStatusHeld;
-const Color _red = kStatusLate;
-const Color _orange = kStatusFiring;
+// Expo status palette now resolves through [KdsColors.of(context)] so the app
+// can swap neon/pastel themes at runtime; the matching fields are:
+//   expoReady (green), expoHeld (amber), expoLate (red), brand (orange/firing).
 
 /// Tickets — the **waiter** expo page (TICKETS.md). Each ticket is a card the
 /// waiter drives: tap a line for the action sheet (serve / recook / fire-now /
@@ -42,27 +39,40 @@ class TicketsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Tickets')),
-      body: BlocBuilder<DemoDataCubit, DemoDataState>(
-        builder: (BuildContext context, DemoDataState state) {
-          if (state.data == null || state.generatedAt == null) {
-            return const BoardEmptyState(
-              icon: Icons.receipt_long_outlined,
-              title: 'Tickets',
+      body: NestedScrollView(
+        floatHeaderSlivers: true,
+        headerSliverBuilder: (BuildContext context, bool innerBoxIsScrolled) =>
+            <Widget>[
+              SliverAppBar(
+                title: const Text('Tickets'),
+                floating: true,
+                snap: true,
+                forceElevated: innerBoxIsScrolled,
+              ),
+            ],
+        body: BlocBuilder<DemoDataCubit, DemoDataState>(
+          builder: (BuildContext context, DemoDataState state) {
+            if (state.data == null || state.generatedAt == null) {
+              return const BoardEmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'Tickets',
+              );
+            }
+            final BoardData board = BoardData.from(
+              state.data!,
+              now: state.generatedAt!,
+              fireImmediately: context
+                  .watch<SettingsCubit>()
+                  .state
+                  .fireImmediately,
             );
-          }
-          final BoardData board = BoardData.from(
-            state.data!,
-            now: state.generatedAt!,
-            fireImmediately:
-                context.watch<SettingsCubit>().state.fireImmediately,
-          );
-          // Rebuild on each tick so cooking status / under-lamp stay live.
-          return BlocBuilder<ServiceClockCubit, ServiceClockState>(
-            builder: (BuildContext context, ServiceClockState clock) =>
-                _TicketList(board: board, clock: clock),
-          );
-        },
+            // Rebuild on each tick so cooking status / under-lamp stay live.
+            return BlocBuilder<ServiceClockCubit, ServiceClockState>(
+              builder: (BuildContext context, ServiceClockState clock) =>
+                  _TicketList(board: board, clock: clock),
+            );
+          },
+        ),
       ),
     );
   }
@@ -82,14 +92,16 @@ class _TicketList extends StatelessWidget {
       (k.status == TicketState.done ? done : active).add(k);
     }
     active.sort((Kot a, Kot b) {
-      final int byTarget =
-          board.statusOf(a).targetMins.compareTo(board.statusOf(b).targetMins);
+      final int byTarget = board
+          .statusOf(a)
+          .targetMins
+          .compareTo(board.statusOf(b).targetMins);
       if (byTarget != 0) return byTarget;
       return a.id.compareTo(b.id);
     });
 
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(kSpaceLg),
       children: <Widget>[
         for (final Kot k in active)
           _TicketCard(kot: k, board: board, clock: clock),
@@ -107,7 +119,11 @@ class _TicketList extends StatelessWidget {
 }
 
 class _TicketCard extends StatelessWidget {
-  const _TicketCard({required this.kot, required this.board, required this.clock});
+  const _TicketCard({
+    required this.kot,
+    required this.board,
+    required this.clock,
+  });
 
   final Kot kot;
   final BoardData board;
@@ -115,29 +131,31 @@ class _TicketCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final TicketStatus status = board.statusOf(kot);
     final bool done = kot.status == TicketState.done;
     final bool allReady = _allReady(status.plateMins);
     final bool late = status.lateMins > 0;
-    final bool anyOpen =
-        kot.lines.any((OrderLine l) => l.state == LineState.open);
+    final bool anyOpen = kot.lines.any(
+      (OrderLine l) => l.state == LineState.open,
+    );
 
     final Color border = done
-        ? Colors.white24
+        ? c.hairlineStrong
         : kot.rush
-            ? _orange
-            : allReady
-                ? _green
-                : late
-                    ? _red
-                    : Colors.white12;
+        ? c.brand
+        : allReady
+        ? c.expoReady
+        : late
+        ? c.expoLate
+        : c.hairline;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(bottom: kSpaceMd),
+      padding: const EdgeInsets.all(kSpaceLg),
       decoration: BoxDecoration(
-        color: KBuzzColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: c.surface,
+        borderRadius: BorderRadius.circular(kRadiusLg),
         border: Border.all(color: border, width: 1.5),
       ),
       child: Column(
@@ -149,15 +167,18 @@ class _TicketCard extends StatelessWidget {
             done: done,
             allReady: allReady,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: kSpaceSm),
           Text(
             done
                 ? 'plates ${atMin(status.plateMins)} · target ${atMin(status.targetMins)}'
                 : '${kot.type == KotType.delivery ? "Rider" : "Plate together"} · '
-                    'plate ${atMin(status.plateMins)} · target ${atMin(status.targetMins)}',
-            style: kMonoNumberStyle.copyWith(color: Colors.white54, fontSize: 12),
+                      'plate ${atMin(status.plateMins)} · target ${atMin(status.targetMins)}',
+            style: kMonoNumberStyle.copyWith(
+              color: c.textMuted,
+              fontSize: kFontSm,
+            ),
           ),
-          const Divider(height: 18, color: Colors.white12),
+          Divider(height: 18, color: c.hairline),
           for (final OrderLine line in kot.lines)
             _LineTile(
               kot: kot,
@@ -166,7 +187,7 @@ class _TicketCard extends StatelessWidget {
               clock: clock,
               plateMins: status.plateMins,
             ),
-          const SizedBox(height: 8),
+          const SizedBox(height: kSpaceSm),
           _TicketFooter(
             kot: kot,
             done: done,
@@ -185,14 +206,19 @@ class _TicketCard extends StatelessWidget {
   // "all ready" never contradicts a line still "holding for table".
   bool _allReady(int plateMins) {
     if (!clock.started) return false;
-    final List<OrderLine> open =
-        kot.lines.where((OrderLine l) => l.state == LineState.open).toList();
+    final List<OrderLine> open = kot.lines
+        .where((OrderLine l) => l.state == LineState.open)
+        .toList();
     if (open.isEmpty) return false;
     return open.every((OrderLine l) {
       final ScheduledDish? d = _schedFor(board, kot.id, l.dishId);
       return d != null &&
-          dishLiveStatus(d, clock.elapsedMins,
-                  started: true, plateMins: plateMins) ==
+          dishLiveStatus(
+                d,
+                clock.elapsedMins,
+                started: true,
+                plateMins: plateMins,
+              ) ==
               DishLiveStatus.ready;
     });
   }
@@ -215,28 +241,37 @@ class _TicketHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Row(
       children: <Widget>[
         Text(
           _codeOf(kot),
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          style: const TextStyle(
+            fontSize: kFontLg,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-        const SizedBox(width: 8),
-        Text(kot.type.label,
-            style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        const SizedBox(width: kSpaceSm),
+        Text(
+          kot.type.label,
+          style: TextStyle(color: c.textMuted, fontSize: kFontSm),
+        ),
         if (kot.rush) ...<Widget>[
-          const SizedBox(width: 6),
-          const _Tag('RUSH', _orange),
+          const SizedBox(width: kSpaceSm),
+          _Tag('RUSH', c.brand),
         ],
         const Spacer(),
         if (done)
-          const _Tag('DONE', Colors.white38)
+          _Tag('DONE', c.textFaint)
         else if (allReady)
-          const _Tag('all ready', _green),
-        const SizedBox(width: 8),
+          _Tag('all ready', c.expoReady),
+        const SizedBox(width: kSpaceSm),
         Text(
           _ageLabel(kot.orderedAt, now),
-          style: kMonoNumberStyle.copyWith(color: Colors.white38, fontSize: 11),
+          style: kMonoNumberStyle.copyWith(
+            color: c.textFaint,
+            fontSize: kFontXs,
+          ),
         ),
       ],
     );
@@ -260,6 +295,7 @@ class _TicketFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final DemoDataCubit cubit = context.read<DemoDataCubit>();
     if (done) {
       return Align(
@@ -278,7 +314,7 @@ class _TicketFooter extends StatelessWidget {
           icon: Icon(kot.rush ? Icons.bolt : Icons.bolt_outlined, size: 16),
           label: Text(kot.rush ? 'Rushing' : 'Rush'),
           style: OutlinedButton.styleFrom(
-            foregroundColor: kot.rush ? _orange : Colors.white70,
+            foregroundColor: kot.rush ? c.brand : c.textSecondary,
           ),
         ),
         const Spacer(),
@@ -287,11 +323,13 @@ class _TicketFooter extends StatelessWidget {
             onPressed: () => cubit.serveAll(kot.id),
             child: const Text('Serve all'),
           ),
-        const SizedBox(width: 4),
+        const SizedBox(width: kSpaceXs),
         FilledButton(
           onPressed: () => _onDone(context, cubit),
           style: FilledButton.styleFrom(
-            backgroundColor: allResolved ? _green : Colors.white12,
+            backgroundColor: allResolved ? c.expoReady : c.hairline,
+            // Foregrounds sit on the filled button; keep white/black so the
+            // label stays legible on the bright/grey fill in both themes.
             foregroundColor: allResolved ? Colors.black : Colors.white,
           ),
           child: const Text('Done'),
@@ -301,19 +339,23 @@ class _TicketFooter extends StatelessWidget {
   }
 
   Future<void> _onDone(BuildContext context, DemoDataCubit cubit) async {
-    final int openCount =
-        kot.lines.where((OrderLine l) => l.state == LineState.open).length;
+    final int openCount = kot.lines
+        .where((OrderLine l) => l.state == LineState.open)
+        .length;
     if (openCount == 0) {
       cubit.markTicketDone(kot.id);
       return;
     }
+    final KdsColors c = KdsColors.of(context);
     final bool? close = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) => AlertDialog(
-        backgroundColor: KBuzzColors.surface,
+        backgroundColor: c.surface,
         title: const Text('Close ticket?'),
-        content: Text('$openCount item${openCount == 1 ? '' : 's'} not served '
-            'yet. Close it anyway?'),
+        content: Text(
+          '$openCount item${openCount == 1 ? '' : 's'} not served '
+          'yet. Close it anyway?',
+        ),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -352,73 +394,81 @@ class _LineTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     final Dish? dish = _dishOf(board, line.dishId);
     final String name = dish?.name ?? line.dishId;
     final String emoji = dish?.emoji ?? '🍽️';
 
     return InkWell(
       onTap: () => _showLineSheet(context, kot, line),
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(kRadiusMd),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: kSpaceSm),
         child: switch (line.state) {
-          LineState.served => _served(name, emoji),
-          LineState.voided => _voided(name, emoji),
+          LineState.served => _served(c, name, emoji),
+          LineState.voided => _voided(c, name, emoji),
           LineState.open => _open(context, name, emoji, dish),
         },
       ),
     );
   }
 
-  Widget _served(String name, String emoji) {
+  Widget _served(KdsColors c, String name, String emoji) {
     final String recook = line.recook > 0 ? ' · recooked ${line.recook}×' : '';
     return Opacity(
       opacity: 0.55,
       child: Row(
         children: <Widget>[
-          Text(emoji, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 8),
+          Text(emoji, style: const TextStyle(fontSize: kFontLg)),
+          const SizedBox(width: kSpaceSm),
           Expanded(
-            child: Text('$name${line.qty > 1 ? ' ×${line.qty}' : ''} — served$recook',
-                style: const TextStyle(color: Colors.white)),
+            child: Text(
+              '$name${line.qty > 1 ? ' ×${line.qty}' : ''} — served$recook',
+              style: TextStyle(color: c.textPrimary),
+            ),
           ),
-          const _Tag('served', _green),
+          _Tag('served', c.expoReady),
         ],
       ),
     );
   }
 
-  Widget _voided(String name, String emoji) {
+  Widget _voided(KdsColors c, String name, String emoji) {
     return Opacity(
       opacity: 0.45,
       child: Row(
         children: <Widget>[
-          Text(emoji, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 8),
+          Text(emoji, style: const TextStyle(fontSize: kFontLg)),
+          const SizedBox(width: kSpaceSm),
           Expanded(
             child: Text(
               '$name — void / 86’d',
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: c.textPrimary,
                 decoration: TextDecoration.lineThrough,
               ),
             ),
           ),
-          const _Tag('void', Colors.white38),
+          _Tag('void', c.textFaint),
         ],
       ),
     );
   }
 
   Widget _open(BuildContext context, String name, String emoji, Dish? dish) {
+    final KdsColors c = KdsColors.of(context);
     final ScheduledDish? d = _schedFor(board, kot.id, line.dishId);
     // Strict coursing: gate "ready" on the whole ticket's plate time, not this
     // line's own cook-finish — a line that finishes early is "held" under the
     // lamp until the table can plate together.
     final DishLiveStatus status = d == null
         ? DishLiveStatus.planned
-        : dishLiveStatus(d, clock.elapsedMins,
-            started: clock.started, plateMins: plateMins);
+        : dishLiveStatus(
+            d,
+            clock.elapsedMins,
+            started: clock.started,
+            plateMins: plateMins,
+          );
     final int cook = line.cookOverrideMins ?? dish?.cookMins ?? 0;
     final int lateMins = d?.lateMins ?? 0;
     final bool underLamp = _underLamp(d);
@@ -426,17 +476,17 @@ class _LineTile extends StatelessWidget {
     final List<Widget> badges = <Widget>[
       if (line.reAt != null)
         line.reason != null
-            ? _Tag('RECOOK · ${line.reason}', _red)
-            : const _Tag('FIRE NOW', _orange),
-      if (status == DishLiveStatus.held) const _Tag('holding for table', _amber),
-      if (lateMins > 0) _Tag('+${lateMins}m late', _red),
-      if (underLamp) const _Tag('● under lamp', _amber),
+            ? _Tag('RECOOK · ${line.reason}', c.expoLate)
+            : _Tag('FIRE NOW', c.brand),
+      if (status == DishLiveStatus.held) _Tag('holding for table', c.expoHeld),
+      if (lateMins > 0) _Tag('+${lateMins}m late', c.expoLate),
+      if (underLamp) _Tag('● under lamp', c.expoHeld),
     ];
 
     return Row(
       children: <Widget>[
-        Text(emoji, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 8),
+        Text(emoji, style: const TextStyle(fontSize: kFontLg)),
+        const SizedBox(width: kSpaceSm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,20 +498,21 @@ class _LineTile extends StatelessWidget {
                       line.qty > 1 ? '$name ×${line.qty}' : name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        color: c.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   if (status == DishLiveStatus.cooking) ...<Widget>[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.local_fire_department,
-                        size: 14, color: _orange),
+                    const SizedBox(width: kSpaceSm),
+                    Icon(Icons.local_fire_department, size: 14, color: c.brand),
                   ] else if (status == DishLiveStatus.held) ...<Widget>[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.hourglass_bottom, size: 14, color: _amber),
+                    const SizedBox(width: kSpaceSm),
+                    Icon(Icons.hourglass_bottom, size: 14, color: c.expoHeld),
                   ] else if (status == DishLiveStatus.ready) ...<Widget>[
-                    const SizedBox(width: 6),
-                    const Icon(Icons.check_circle, size: 14, color: _green),
+                    const SizedBox(width: kSpaceSm),
+                    Icon(Icons.check_circle, size: 14, color: c.expoReady),
                   ],
                 ],
               ),
@@ -471,8 +522,8 @@ class _LineTile extends StatelessWidget {
                 Text(
                   _timingLabel(d, status),
                   style: TextStyle(
-                    color: _timingColor(status),
-                    fontSize: 11,
+                    color: _timingColor(c, status),
+                    fontSize: kFontXs,
                     fontWeight: status == DishLiveStatus.ready
                         ? FontWeight.w700
                         : FontWeight.w500,
@@ -480,16 +531,20 @@ class _LineTile extends StatelessWidget {
                 ),
               if (badges.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 3),
+                  padding: const EdgeInsets.only(top: kSpaceXs),
                   child: Wrap(spacing: 6, runSpacing: 4, children: badges),
                 ),
             ],
           ),
         ),
-        const SizedBox(width: 8),
-        Text('${cook}m',
-            style: kMonoNumberStyle.copyWith(
-                color: Colors.white54, fontSize: 12)),
+        const SizedBox(width: kSpaceSm),
+        Text(
+          '${cook}m',
+          style: kMonoNumberStyle.copyWith(
+            color: c.textMuted,
+            fontSize: kFontSm,
+          ),
+        ),
       ],
     );
   }
@@ -530,35 +585,46 @@ class _LineTile extends StatelessWidget {
   }
 
   /// Status colour for the timing line, so waiters can scan state at a glance.
-  Color _timingColor(DishLiveStatus status) => switch (status) {
-        DishLiveStatus.ready => _green,
-        DishLiveStatus.cooking => _orange,
-        DishLiveStatus.held => _amber,
-        DishLiveStatus.waiting || DishLiveStatus.planned => Colors.white38,
-      };
+  Color _timingColor(KdsColors c, DishLiveStatus status) => switch (status) {
+    DishLiveStatus.ready => c.expoReady,
+    DishLiveStatus.cooking => c.brand,
+    DishLiveStatus.held => c.expoHeld,
+    DishLiveStatus.waiting || DishLiveStatus.planned => c.textFaint,
+  };
 }
 
 /// The contextual action sheet for a tapped line.
-Future<void> _showLineSheet(BuildContext context, Kot kot, OrderLine line) async {
+Future<void> _showLineSheet(
+  BuildContext context,
+  Kot kot,
+  OrderLine line,
+) async {
   final String? lineId = line.id;
   if (lineId == null) return; // not yet persisted — no stable target
+  final KdsColors c = KdsColors.of(context);
   final DemoDataCubit cubit = context.read<DemoDataCubit>();
   final int reAt = context.read<ServiceClockCubit>().state.elapsedMins.round();
 
   await showModalBottomSheet<void>(
     context: context,
-    backgroundColor: KBuzzColors.surface,
+    backgroundColor: c.surface,
     builder: (BuildContext sheet) {
-      Widget tile(IconData icon, String label, VoidCallback onTap,
-              {Color color = Colors.white}) =>
-          ListTile(
-            leading: Icon(icon, color: color),
-            title: Text(label, style: TextStyle(color: color)),
-            onTap: () {
-              Navigator.of(sheet).pop();
-              onTap();
-            },
-          );
+      Widget tile(
+        IconData icon,
+        String label,
+        VoidCallback onTap, {
+        Color? color,
+      }) {
+        final Color fg = color ?? c.textPrimary;
+        return ListTile(
+          leading: Icon(icon, color: fg),
+          title: Text(label, style: TextStyle(color: fg)),
+          onTap: () {
+            Navigator.of(sheet).pop();
+            onTap();
+          },
+        );
+      }
 
       return SafeArea(
         child: Column(
@@ -566,42 +632,63 @@ Future<void> _showLineSheet(BuildContext context, Kot kot, OrderLine line) async
           children: <Widget>[
             switch (line.state) {
               LineState.voided => tile(
-                  Icons.restore, 'Restore', () => cubit.restoreLine(lineId)),
+                Icons.restore,
+                'Restore',
+                () => cubit.restoreLine(lineId),
+              ),
               LineState.served => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    tile(Icons.undo, 'Mark unserved',
-                        () => cubit.unserveLine(lineId)),
-                    tile(Icons.replay, 'Recook (send back)…',
-                        () => _showReasonSheet(context, cubit, lineId, reAt),
-                        color: _red),
-                  ],
-                ),
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  tile(
+                    Icons.undo,
+                    'Mark unserved',
+                    () => cubit.unserveLine(lineId),
+                  ),
+                  tile(
+                    Icons.replay,
+                    'Recook (send back)…',
+                    () => _showReasonSheet(context, cubit, lineId, reAt),
+                    color: c.expoLate,
+                  ),
+                ],
+              ),
               LineState.open => Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    tile(Icons.check_circle, 'Mark served',
-                        () => cubit.serveLine(lineId), color: _green),
-                    tile(Icons.replay, 'Recook (send back)…',
-                        () => _showReasonSheet(context, cubit, lineId, reAt),
-                        color: _red),
-                    tile(Icons.local_fire_department,
-                        'Fire now — missing / expedite',
-                        () => cubit.fireNowLine(lineId, reAtMins: reAt),
-                        color: _orange),
-                    tile(
-                        (line.note ?? '').trim().isEmpty
-                            ? Icons.sticky_note_2_outlined
-                            : Icons.edit_note,
-                        (line.note ?? '').trim().isEmpty
-                            ? 'Add note'
-                            : 'Edit note',
-                        () => _showNoteDialog(context, cubit, line),
-                        color: _amber),
-                    tile(Icons.block, 'Void / 86',
-                        () => cubit.voidLine(lineId), color: Colors.white54),
-                  ],
-                ),
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  tile(
+                    Icons.check_circle,
+                    'Mark served',
+                    () => cubit.serveLine(lineId),
+                    color: c.expoReady,
+                  ),
+                  tile(
+                    Icons.replay,
+                    'Recook (send back)…',
+                    () => _showReasonSheet(context, cubit, lineId, reAt),
+                    color: c.expoLate,
+                  ),
+                  tile(
+                    Icons.local_fire_department,
+                    'Fire now — missing / expedite',
+                    () => cubit.fireNowLine(lineId, reAtMins: reAt),
+                    color: c.brand,
+                  ),
+                  tile(
+                    (line.note ?? '').trim().isEmpty
+                        ? Icons.sticky_note_2_outlined
+                        : Icons.edit_note,
+                    (line.note ?? '').trim().isEmpty ? 'Add note' : 'Edit note',
+                    () => _showNoteDialog(context, cubit, line),
+                    color: c.expoHeld,
+                  ),
+                  tile(
+                    Icons.block,
+                    'Void / 86',
+                    () => cubit.voidLine(lineId),
+                    color: c.textMuted,
+                  ),
+                ],
+              ),
             },
           ],
         ),
@@ -617,19 +704,27 @@ Future<void> _showReasonSheet(
   String lineId,
   int reAt,
 ) async {
+  final KdsColors c = KdsColors.of(context);
   await showModalBottomSheet<void>(
     context: context,
-    backgroundColor: KBuzzColors.surface,
+    backgroundColor: c.surface,
     builder: (BuildContext sheet) => SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              kSpaceLg,
+              kSpaceLg,
+              kSpaceLg,
+              kSpaceSm,
+            ),
             child: Align(
               alignment: Alignment.centerLeft,
-              child: Text('Send back — reason',
-                  style: TextStyle(color: Colors.white54)),
+              child: Text(
+                'Send back — reason',
+                style: TextStyle(color: c.textMuted),
+              ),
             ),
           ),
           for (final String reason in kRecookReasons)
@@ -678,8 +773,9 @@ class _NoteDialog extends StatefulWidget {
 }
 
 class _NoteDialogState extends State<_NoteDialog> {
-  late final TextEditingController _controller =
-      TextEditingController(text: widget.initial);
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initial,
+  );
 
   @override
   void dispose() {
@@ -689,8 +785,9 @@ class _NoteDialogState extends State<_NoteDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return AlertDialog(
-      backgroundColor: KBuzzColors.surface,
+      backgroundColor: c.surface,
       title: const Text('Special instruction'),
       content: TextField(
         controller: _controller,
@@ -707,7 +804,7 @@ class _NoteDialogState extends State<_NoteDialog> {
         if (widget.initial.trim().isNotEmpty)
           TextButton(
             onPressed: () => Navigator.of(context).pop(''), // clear
-            child: const Text('Clear', style: TextStyle(color: _red)),
+            child: Text('Clear', style: TextStyle(color: c.expoLate)),
           ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(), // cancel
@@ -729,21 +826,25 @@ class _SectionDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: kSpaceSm),
       child: Row(
         children: <Widget>[
-          const Expanded(child: Divider(color: Colors.white12)),
+          Expanded(child: Divider(color: c.hairline)),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: Text(label,
-                style: const TextStyle(
-                    color: Colors.white38,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.5)),
+            padding: const EdgeInsets.symmetric(horizontal: kSpaceMd),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: c.textFaint,
+                fontSize: kFontSm,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
-          const Expanded(child: Divider(color: Colors.white12)),
+          Expanded(child: Divider(color: c.hairline)),
         ],
       ),
     );
@@ -758,7 +859,7 @@ class _Tag extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      AppBadge(text, color, fontSize: 10, horizontal: 7, vertical: 2);
+      AppBadge(text, color, fontSize: kFontXs, horizontal: 7, vertical: 2);
 }
 
 Dish? _dishOf(BoardData board, String dishId) {

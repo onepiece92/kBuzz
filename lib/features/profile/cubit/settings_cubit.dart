@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,6 +39,7 @@ class SettingsState extends Equatable {
     required this.claudeApiKey,
     this.announceEnabled = true,
     this.fireImmediately = false,
+    this.themeMode = ThemeMode.dark,
   });
 
   /// How long a fire-next toast stays on screen before auto-dismissing.
@@ -59,6 +61,10 @@ class SettingsState extends Equatable {
   /// allows, so the station starts now. Drives [BoardData.from]'s scheduler config.
   final bool fireImmediately;
 
+  /// Active theme. Defaults to [ThemeMode.dark] (the neon KDS board);
+  /// [ThemeMode.light] is the pastel theme and [ThemeMode.system] follows the OS.
+  final ThemeMode themeMode;
+
   /// Whether AI features have a key to use (in-app key or build-time fallback).
   bool get aiConfigured => claudeApiKey.isNotEmpty || kEnvClaudeKey.isNotEmpty;
 
@@ -67,17 +73,24 @@ class SettingsState extends Equatable {
     String? claudeApiKey,
     bool? announceEnabled,
     bool? fireImmediately,
+    ThemeMode? themeMode,
   }) =>
       SettingsState(
         fireToastDuration: fireToastDuration ?? this.fireToastDuration,
         claudeApiKey: claudeApiKey ?? this.claudeApiKey,
         announceEnabled: announceEnabled ?? this.announceEnabled,
         fireImmediately: fireImmediately ?? this.fireImmediately,
+        themeMode: themeMode ?? this.themeMode,
       );
 
   @override
-  List<Object?> get props =>
-      <Object?>[fireToastDuration, claudeApiKey, announceEnabled, fireImmediately];
+  List<Object?> get props => <Object?>[
+        fireToastDuration,
+        claudeApiKey,
+        announceEnabled,
+        fireImmediately,
+        themeMode,
+      ];
 }
 
 /// Holds app preferences and persists them. Backed by [SharedPreferences] when
@@ -91,6 +104,7 @@ class SettingsCubit extends Cubit<SettingsState> {
         claudeApiKey: prefs?.getString(claudeApiKeyPref) ?? '',
         announceEnabled: prefs?.getBool(_announceKey) ?? true,
         fireImmediately: prefs?.getBool(_fireImmediatelyKey) ?? false,
+        themeMode: _readThemeMode(prefs),
       ));
 
   final SharedPreferences? _prefs;
@@ -98,6 +112,7 @@ class SettingsCubit extends Cubit<SettingsState> {
   static const String _fireToastKey = 'fireToastSeconds';
   static const String _announceKey = 'announceEnabled';
   static const String _fireImmediatelyKey = 'fireImmediately';
+  static const String _themeModeKey = 'themeMode';
 
   /// SharedPreferences key for the in-app Claude API key. The DI-wired ticket
   /// scanner and demo-data generator read this same key (see `app/di.dart`), so a
@@ -113,6 +128,21 @@ class SettingsCubit extends Cubit<SettingsState> {
     return seconds == null
         ? defaultFireToastDuration
         : Duration(seconds: seconds);
+  }
+
+  static ThemeMode _readThemeMode(SharedPreferences? prefs) {
+    final int? i = prefs?.getInt(_themeModeKey);
+    return (i != null && i >= 0 && i < ThemeMode.values.length)
+        ? ThemeMode.values[i]
+        : ThemeMode.dark;
+  }
+
+  /// Set (and persist) the active theme. Takes effect immediately — the root
+  /// [MaterialApp] rebuilds on this state and swaps the neon/pastel palettes.
+  void setThemeMode(ThemeMode mode) {
+    if (mode == state.themeMode) return;
+    emit(state.copyWith(themeMode: mode));
+    _prefs?.setInt(_themeModeKey, mode.index);
   }
 
   /// Set (and persist) the fire-toast hold time. Takes effect on the next fire.
