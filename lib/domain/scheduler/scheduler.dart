@@ -21,6 +21,12 @@ import 'package:kbuzz/domain/scheduler/models.dart';
 ///      busy + holdable            → fire earlier, HOLD the food
 ///      busy + not holdable        → fire later, plate LATE
 /// 6. lane-pack each station for the rail; surface the bottleneck.
+///
+/// [pinnedFireMins] locks already-fired cooks in place: keyed by [cookKey], each
+/// entry's cook is pre-placed at the captured fire minute and exempt from the
+/// JIT re-park, so adding a ticket can never re-time a dish already on the pass.
+/// Empty by default — with no pins the output is byte-identical to before, so
+/// the golden/determinism tests are unaffected.
 Schedule schedule({
   required List<Kot> kots,
   required Map<String, Dish> menu,
@@ -28,6 +34,7 @@ Schedule schedule({
   required DateTime now,
   SlaConfig sla = const SlaConfig.standard(),
   SchedulerConfig config = const SchedulerConfig(),
+  Map<String, int> pinnedFireMins = const <String, int>{},
 }) {
   final int hmax = config.horizonMins;
   final int batchWin = config.batchWindowMins;
@@ -66,6 +73,7 @@ Schedule schedule({
           priority: priority,
           priorityKind: kind,
           recookReason: kind == PriorityKind.recook ? line.reason : null,
+          reFireSeq: line.reFireSeq,
           member: ScheduledMember(
             kotId: k.id,
             table: k.table,
@@ -111,6 +119,7 @@ Schedule schedule({
       priority: r.priority,
       priorityKind: r.priorityKind,
       recookReason: r.recookReason,
+      reFireSeq: r.reFireSeq,
       members: <ScheduledMember>[r.member],
       qty: r.member.qty,
     );
@@ -120,11 +129,35 @@ Schedule schedule({
     }
   }
 
+  // 2b. Pin already-fired cooks. A cook whose key is in [pinnedFireMins] has
+  //     physically started in the live kitchen, so its fire minute is locked to
+  //     the captured value and must not move on a reschedule (adding a ticket
+  //     can't re-time a dish already on the pass). Keyed on the reschedule-stable
+  //     [cookKey]; reality, so it's honoured even over capacity.
+  for (final _Working d in dishes) {
+    final int? pin = pinnedFireMins[cookKey(
+      stationId: d.stationId,
+      dishId: d.dish.id,
+      kotIds: <String>[for (final ScheduledMember m in d.members) m.kotId],
+      priority: d.priorityKind,
+      reFireSeq: d.reFireSeq,
+    )];
+    if (pin != null) {
+      d.pinned = true;
+      d.pinnedFireAt = max(floor, pin);
+    }
+  }
+
   // 3. ideal fire per dish. Default: back-schedule (ready just-in-time). Fire-
   //    ASAP mode fires as early as capacity allows (ideal = now); re-fires /
-  //    fire-now keep their intended fire time (target − cook == reAt).
+  //    fire-now keep their intended fire time (target − cook == reAt). A pinned
+  //    cook's ideal is its locked fire minute (it's pre-placed below).
   for (final _Working d in dishes) {
-    d.ideal = (config.fireAsap && !d.priority) ? floor : d.target - d.cook;
+    d.ideal = d.pinned
+        ? d.pinnedFireAt
+        : (config.fireAsap && !d.priority)
+            ? floor
+            : d.target - d.cook;
   }
 
   // 4. sort by ideal, then target, then longer cook first; stable by seq so the
@@ -176,7 +209,22 @@ Schedule schedule({
     }
   }
 
+  // 5a. Pre-place pinned (already-fired) cooks at their locked fire minute and
+  //     reserve their capacity FIRST, so the greedy pass below routes everything
+  //     else around them. Force-filled (reality outranks the capacity model): a
+  //     cook that's physically on the pass occupies its station regardless.
   for (final _Working d in dishes) {
+    if (!d.pinned) continue;
+    final int t = d.pinnedFireAt;
+    fill(d.stationId, t, d.cook);
+    d.fireAt = t;
+    d.finishAt = t + d.cook;
+    d.holdMins = max(0, d.target - d.finishAt);
+    d.lateMins = max(0, d.finishAt - d.target);
+  }
+
+  for (final _Working d in dishes) {
+    if (d.pinned) continue; // already placed at its locked fire minute
     final int want = max(floor, d.ideal);
     int? t = feasible(d.stationId, want, d.cook) ? want : null;
     for (int delta = 1; delta < hmax && t == null; delta++) {
@@ -225,6 +273,7 @@ Schedule schedule({
       }
     }
     bool eligible(_Working d) =>
+        !d.pinned && // a fired cook is locked in place
         d.members.length == 1 && // batched cooks serve several tickets
         d.priorityKind != PriorityKind.recook &&
         d.priorityKind != PriorityKind.fireNow && // re-fires stay ASAP
@@ -382,6 +431,7 @@ ScheduledDish _freeze(_Working d) => ScheduledDish(
       lane: d.lane,
       priority: d.priorityKind,
       recookReason: d.recookReason,
+      reFireSeq: d.reFireSeq,
     );
 
 /// A single expanded ticket line before batching.
@@ -394,6 +444,7 @@ class _Raw {
     required this.priority,
     required this.priorityKind,
     required this.recookReason,
+    required this.reFireSeq,
     required this.member,
   });
 
@@ -404,6 +455,7 @@ class _Raw {
   final bool priority;
   final PriorityKind priorityKind;
   final String? recookReason;
+  final int reFireSeq;
   final ScheduledMember member;
 }
 
@@ -418,6 +470,7 @@ class _Working {
     required this.priority,
     required this.priorityKind,
     required this.recookReason,
+    required this.reFireSeq,
     required this.members,
     required this.qty,
   });
@@ -428,6 +481,7 @@ class _Working {
   final bool priority;
   final PriorityKind priorityKind;
   final String? recookReason;
+  final int reFireSeq;
   final List<ScheduledMember> members;
 
   int qty;
@@ -439,6 +493,12 @@ class _Working {
   int lateMins = 0;
   int lane = 0;
   int uid = 0;
+
+  /// True once this cook has physically fired (its key is in `pinnedFireMins`):
+  /// [fireAt] is locked to [pinnedFireAt] and the placement/JIT passes leave it
+  /// put, so a reschedule can't move an in-flight cook.
+  bool pinned = false;
+  int pinnedFireAt = 0;
 
   String get stationId => dish.stationId;
   bool get holdable => dish.holdable;

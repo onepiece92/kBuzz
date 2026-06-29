@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
@@ -13,6 +14,7 @@ import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/board/board_widgets.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
+import 'package:kbuzz/features/service/cubit/fired_cooks_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
 /// Stations rail — each station's scheduled cooks drawn as a lane-packed
@@ -52,6 +54,11 @@ class StationsPage extends StatelessWidget {
                   .watch<SettingsCubit>()
                   .state
                   .fireImmediately,
+              // Optional: present app-wide (DI), absent in lean widget tests →
+              // empty pins (no pinning, identical schedule).
+              pinnedFireMins:
+                  context.watch<FiredCooksCubit?>()?.state.pinnedFireMins ??
+                      const <String, int>{},
             );
             return _StationsRail(board: board);
           },
@@ -76,6 +83,38 @@ class _StationsRail extends StatefulWidget {
 class _StationsRailState extends State<_StationsRail> {
   int? _selectedUid;
 
+  /// Shared horizontal pan (minutes scrolled off the left), used only while the
+  /// user is dragging; otherwise the rail auto-follows the now-line.
+  double _userOffsetMin = 0;
+  bool _follow = true;
+  Timer? _resnap;
+
+  @override
+  void dispose() {
+    _resnap?.cancel();
+    super.dispose();
+  }
+
+  void _onScrubStart(double currentOffsetMin) {
+    _resnap?.cancel();
+    setState(() {
+      _follow = false;
+      _userOffsetMin = currentOffsetMin; // seed from the live position (no jump)
+    });
+  }
+
+  void _onScrub(double deltaMin) {
+    setState(() => _userOffsetMin = math.max(0, _userOffsetMin + deltaMin));
+  }
+
+  void _onScrubEnd() {
+    // Snap back to live a few seconds after the user stops panning history.
+    _resnap?.cancel();
+    _resnap = Timer(const Duration(seconds: 4), () {
+      if (mounted) setState(() => _follow = true);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final BoardData board = widget.board;
@@ -83,6 +122,9 @@ class _StationsRailState extends State<_StationsRail> {
         board.stationLanes;
     final Bottleneck? bottleneck = board.schedule.bottleneck;
     final int horizon = math.max(1, board.schedule.horizonMins);
+    // Admin-set time window (minutes shown before the rail scrolls). Live.
+    final double windowMins =
+        context.watch<SettingsCubit>().state.railWindowMins.toDouble();
 
     ScheduledDish? selected;
     if (_selectedUid != null) {
@@ -93,6 +135,14 @@ class _StationsRailState extends State<_StationsRail> {
         }
       }
     }
+
+    final _RailScroll scroll = _RailScroll(
+      userOffsetMin: _userOffsetMin,
+      follow: _follow,
+      onScrubStart: _onScrubStart,
+      onScrub: _onScrub,
+      onScrubEnd: _onScrubEnd,
+    );
 
     return ListView(
       padding: const EdgeInsets.all(kSpaceLg),
@@ -108,13 +158,21 @@ class _StationsRailState extends State<_StationsRail> {
           _StationSection(
             station: s.station,
             lane: s.lane,
+            board: board,
             horizonMins: horizon,
+            windowMins: windowMins,
             isBottleneck: board.isBottleneck(s.station.id),
             selectedUid: _selectedUid,
+            scroll: scroll,
             onTap: (int uid) =>
                 setState(() => _selectedUid = _selectedUid == uid ? null : uid),
           ),
-        _TimeAxis(horizonMins: horizon),
+        _TimeAxis(
+          horizonMins: horizon,
+          windowMins: windowMins,
+          epoch: board.now,
+          scroll: scroll,
+        ),
         const SizedBox(height: kSpaceMd),
         const _Legend(),
         if (selected != null) ...<Widget>[
@@ -126,23 +184,57 @@ class _StationsRailState extends State<_StationsRail> {
   }
 }
 
+/// Shared horizontal pan + auto-follow for all station tracks, so they scroll
+/// together. Held by [_StationsRailState]; each [_StationTimeline] reads
+/// [follow]/[userOffsetMin] and reports drags back through the callbacks.
+class _RailScroll {
+  const _RailScroll({
+    required this.userOffsetMin,
+    required this.follow,
+    required this.onScrubStart,
+    required this.onScrub,
+    required this.onScrubEnd,
+  });
+
+  /// Minutes scrolled off the left edge while the user is panning history.
+  final double userOffsetMin;
+
+  /// When true, the rail ignores [userOffsetMin] and tracks the now-line.
+  final bool follow;
+
+  /// Seed the manual offset from the current live position when a drag begins.
+  final void Function(double currentOffsetMin) onScrubStart;
+
+  /// Pan by a minute delta during a drag.
+  final void Function(double deltaMin) onScrub;
+
+  /// Drag finished — schedule the snap back to live.
+  final VoidCallback onScrubEnd;
+}
+
 /// One station: header (dot, name, capacity, bottleneck flag, saturation pill)
 /// over its lane-packed timeline.
 class _StationSection extends StatelessWidget {
   const _StationSection({
     required this.station,
     required this.lane,
+    required this.board,
     required this.horizonMins,
+    required this.windowMins,
     required this.isBottleneck,
     required this.selectedUid,
+    required this.scroll,
     required this.onTap,
   });
 
   final Station station;
   final StationLane lane;
+  final BoardData board;
   final int horizonMins;
+  final double windowMins;
   final bool isBottleneck;
   final int? selectedUid;
+  final _RailScroll scroll;
   final ValueChanged<int> onTap;
 
   @override
@@ -192,8 +284,11 @@ class _StationSection extends StatelessWidget {
               dishes: lane.dishes,
               lanes: lane.lanes,
               color: color,
+              board: board,
               horizonMins: horizonMins,
+              windowMins: windowMins,
               selectedUid: selectedUid,
+              scroll: scroll,
               onTap: onTap,
             ),
           ],
@@ -308,71 +403,134 @@ class _StationTimeline extends StatelessWidget {
     required this.dishes,
     required this.lanes,
     required this.color,
+    required this.board,
     required this.horizonMins,
+    required this.windowMins,
     required this.selectedUid,
+    required this.scroll,
     required this.onTap,
   });
 
-  // Time-scaled Gantt: bar width = cook duration. A bar is one line tall (name)
-  // or two lines when it carries a note (name + a sliding note underneath). A
-  // station's lanes all use the taller row height when *any* cook there has a
+  // Fixed-scale Gantt: bar width = cook duration at [_pxFor]. A bar is one line
+  // tall (name) or two when it carries a note (name + a sliding note underneath).
+  // A station's lanes all use the taller row height when *any* cook there has a
   // note, so lanes never overlap; note-less bars then sit short in their row.
   // Names/notes longer than the bar slide (MarqueeText) instead of widening it.
-  // Heights leave room for the 2px outline a late/priority/selected bar draws
-  // (which eats 4px vertically) plus the 6px label padding.
   static const double barPlainHeight = 30;
   static const double barNotedHeight = 50;
   static const double rowGap = 6;
   static const double minBarWidth = 30;
 
+  /// Where the now-line sits across the viewport while auto-following (0 = left,
+  /// 1 = right) — kept near the left so most of the view shows what's UPCOMING.
+  static const double followFraction = 0.3;
+
   final List<ScheduledDish> dishes;
   final int lanes;
   final Color color;
+  final BoardData board;
   final int horizonMins;
+
+  /// Minutes shown at once before the rail switches from fit-to-width to a fixed
+  /// scale you scroll (admin-set, [SettingsState.railWindowMins]). A board that
+  /// fits within this fills the width; a larger one scrolls instead of crushing.
+  final double windowMins;
+
   final int? selectedUid;
+  final _RailScroll scroll;
   final ValueChanged<int> onTap;
 
   static bool _hasNote(ScheduledDish d) =>
       d.members.any((ScheduledMember m) => (m.note ?? '').trim().isNotEmpty);
 
+  /// Left edge of the visible window, in board-minutes — auto-follows the now-
+  /// line, or honours the user's pan. Shared by the timeline + axis so they stay
+  /// aligned.
+  static double offsetFor(
+    _RailScroll scroll,
+    int horizonMins,
+    double elapsedMins,
+    double windowMins,
+  ) {
+    final double viewMins = math.min(horizonMins.toDouble(), windowMins);
+    // Live position: hold the now-line at [followFraction] across the viewport
+    // (pinned to the left edge only while there's less than that much history).
+    final double followOffset =
+        math.max(0.0, elapsedMins - viewMins * followFraction);
+    if (scroll.follow) return followOffset;
+    // While panning history, allow [0 .. end of scheduled content or live].
+    final double dragMax =
+        math.max(followOffset, math.max(0.0, horizonMins - viewMins));
+    return scroll.userOffsetMin.clamp(0.0, dragMax);
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Per-lane row heights: a lane is tall (fits a note line) only when some cook
-    // in *that* lane carries a note; otherwise it's a single-line lane. Lanes are
-    // stacked cumulatively so the gap between every row is exactly [rowGap] — a
-    // note-less lane no longer leaves a tall empty slot under its short bar (which
-    // made the row spacing look uneven once any cook on the station had a note).
-    final List<bool> laneNoted = List<bool>.filled(lanes, false);
-    for (final ScheduledDish d in dishes) {
-      if (d.lane >= 0 && d.lane < lanes && _hasNote(d)) laneNoted[d.lane] = true;
-    }
-    final List<double> laneTop = List<double>.filled(lanes, 0);
-    double laneY = 0;
-    for (int i = 0; i < lanes; i++) {
-      laneTop[i] = laneY;
-      laneY += (laneNoted[i] ? barNotedHeight : barPlainHeight) + rowGap;
-    }
-    final double trackHeight = laneY;
     return BlocBuilder<ServiceClockCubit, ServiceClockState>(
       builder: (BuildContext context, ServiceClockState clock) {
+        // Drop cooks whose ticket is fully served + past its retain window — old
+        // items fall off the rail instead of piling up as tickets keep arriving.
+        final List<ScheduledDish> visible = clock.started
+            ? <ScheduledDish>[
+                for (final ScheduledDish d in dishes)
+                  if (!dishServed(d, board.statusForKot, clock.elapsedMins,
+                      started: clock.started, retainMins: kDefaultRetainMins))
+                    d,
+              ]
+            : dishes;
+
+        // Per-lane row heights from the visible cooks (a lane is tall only when
+        // some visible cook in it carries a note); stacked so every gap = rowGap.
+        final List<bool> laneNoted = List<bool>.filled(lanes, false);
+        for (final ScheduledDish d in visible) {
+          if (d.lane >= 0 && d.lane < lanes && _hasNote(d)) {
+            laneNoted[d.lane] = true;
+          }
+        }
+        final List<double> laneTop = List<double>.filled(lanes, 0);
+        double laneY = 0;
+        for (int i = 0; i < lanes; i++) {
+          laneTop[i] = laneY;
+          laneY += (laneNoted[i] ? barNotedHeight : barPlainHeight) + rowGap;
+        }
+        final double trackHeight = laneY;
+
         return LayoutBuilder(
           builder: (BuildContext context, BoxConstraints constraints) {
             final KdsColors c = KdsColors.of(context);
             final double trackW = constraints.maxWidth;
-            return SizedBox(
-              height: trackHeight,
-              width: trackW,
-              child: Stack(
-                clipBehavior: Clip.hardEdge,
-                children: <Widget>[
-                  // Time-scaled colour bars: positioned by fire time, width = cook
-                  // duration ("matches the cook clock"). Name (and note, if any)
-                  // slide inside the bar; full detail is on the card on tap.
-                  for (final ScheduledDish d in dishes)
-                    _buildBar(d, trackW, laneTop, clock),
-                  if (clock.started)
-                    _buildNowLine(trackW, clock.elapsedMins, c.textPrimary),
-                ],
+            // Fixed px/min once the board outgrows the window; fit-to-width below.
+            final double viewMins = math.min(horizonMins.toDouble(), windowMins);
+            final double pxPerMin = trackW / viewMins;
+            final double offsetMin =
+                offsetFor(scroll, horizonMins, clock.elapsedMins, windowMins);
+
+            final List<Widget> bars = <Widget>[];
+            for (final ScheduledDish d in visible) {
+              final double left = (d.fireAt - offsetMin) * pxPerMin;
+              final double width = math.max(minBarWidth, d.cookMins * pxPerMin);
+              if (left + width < 0 || left > trackW) continue; // off-screen
+              bars.add(_buildBar(d, left, width, laneTop, clock));
+            }
+            final double nowX = (clock.elapsedMins - offsetMin) * pxPerMin;
+
+            return GestureDetector(
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragStart: (_) => scroll.onScrubStart(offsetMin),
+              onHorizontalDragUpdate: (DragUpdateDetails d) =>
+                  scroll.onScrub(-(d.primaryDelta ?? 0) / pxPerMin),
+              onHorizontalDragEnd: (_) => scroll.onScrubEnd(),
+              child: SizedBox(
+                height: trackHeight,
+                width: trackW,
+                child: Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: <Widget>[
+                    ...bars,
+                    if (clock.started && nowX >= 0 && nowX <= trackW)
+                      _buildNowLine(nowX, c.textPrimary),
+                  ],
+                ),
               ),
             );
           },
@@ -381,19 +539,19 @@ class _StationTimeline extends StatelessWidget {
     );
   }
 
+  /// The bar's identity colour: its **ticket's** colour, shared across stations
+  /// so one order is traceable down the rail. Batched cooks (rare) take their
+  /// first ticket's colour; a member-less cook falls back to the station [color].
+  Color _barColor(ScheduledDish d) =>
+      d.members.isEmpty ? color : ticketColor(d.members.first.kotId);
+
   Widget _buildBar(
     ScheduledDish d,
-    double trackW,
+    double left,
+    double width,
     List<double> laneTop,
     ServiceClockState clock,
   ) {
-    final double left = (d.fireAt / horizonMins * trackW).clamp(0.0, trackW);
-    final double maxW = math.max(minBarWidth, trackW - left);
-    // Width = the time-scaled cook duration ("matches the cook clock").
-    final double width = (d.cookMins / horizonMins * trackW).clamp(
-      minBarWidth,
-      maxW,
-    );
     final DishLiveStatus status = dishLiveStatus(
       d,
       clock.elapsedMins,
@@ -407,7 +565,7 @@ class _StationTimeline extends StatelessWidget {
       child: _DishBar(
         key: ValueKey<int>(d.uid),
         dish: d,
-        color: color,
+        color: _barColor(d),
         status: status,
         selected: d.uid == selectedUid,
         onTap: () => onTap(d.uid),
@@ -415,8 +573,7 @@ class _StationTimeline extends StatelessWidget {
     );
   }
 
-  Widget _buildNowLine(double trackW, double elapsedMins, Color color) {
-    final double x = (elapsedMins / horizonMins * trackW).clamp(0.0, trackW);
+  Widget _buildNowLine(double x, Color color) {
     return Positioned(
       left: x,
       top: 0,
@@ -435,11 +592,14 @@ class _StationTimeline extends StatelessWidget {
 }
 
 /// A single dish bar: emoji + name on the first line, with the cook's note (if
-/// any) sliding on a second line beneath it. Late (red outline), selected (white
-/// outline) and holding (amber right edge) markers; faded while planned/waiting.
-/// Live status is read from the bar colour + the sweeping now-line, so no inline
-/// status glyph is shown. A name or note longer than the (time-scaled) bar
-/// slides instead of widening it.
+/// any) sliding on a second line beneath it. Its [color] is the **ticket's**
+/// colour ([ticketColor]) — so every cook of one order shares a bar colour across
+/// stations and the kitchen can trace a ticket down the rail. *Status* still
+/// overrides that identity: late (red outline), re-fire/rush (red/orange),
+/// selected (white outline) and holding (amber right edge); faded while
+/// planned/waiting. Live status is read from those markers + the sweeping
+/// now-line, so no inline status glyph is shown. A name or note longer than the
+/// (time-scaled) bar slides instead of widening it.
 class _DishBar extends StatelessWidget {
   const _DishBar({
     super.key,
@@ -469,12 +629,14 @@ class _DishBar extends StatelessWidget {
         if ((m.note ?? '').trim().isNotEmpty) m.note!.trim(),
     ];
     final String? noteText = notes.isEmpty ? null : notes.toSet().join('; ');
-    // Outlined bars: the station colour lives in the border stroke (below) plus
-    // a faint tint of itself over the surface — not a saturated fill — so the
-    // label sits on a near-neutral background and reads cleanly in both themes.
-    // Planned/waiting cooks dim the tint, stroke and text.
+    // Outlined bars: the ticket colour ([color]) lives in the border stroke
+    // (below) plus a tint of itself over the surface, so an order is groupable at
+    // a glance. The colour shows at **full strength for queued cooks too** — a
+    // planned/waiting bar isn't dimmed; "not yet fired" is signalled only by the
+    // muted label + the sweeping now-line (and the cooking trace marks what's
+    // live). Tint stays moderate so the label still reads cleanly in both themes.
     final Color fill = Color.alphaBlend(
-      color.withValues(alpha: faded ? 0.05 : 0.12),
+      color.withValues(alpha: 0.26),
       c.surface,
     );
     final Color textColor = faded ? c.textMuted : c.textPrimary;
@@ -484,15 +646,12 @@ class _DishBar extends StatelessWidget {
         : dish.priority != PriorityKind.none
         ? c.brand
         : null;
-    // Stroke precedence: plates-late, re-fire/rush, selected, then the station
+    // Stroke precedence: plates-late, re-fire/rush, selected, then the ticket
     // colour itself (the bar's default identity). Accented states draw heavier.
     final bool accented = late || priorityColor != null || selected;
     final Color borderColor = late
         ? c.expoLate
-        : priorityColor ??
-              (selected
-                  ? c.textPrimary
-                  : color.withValues(alpha: faded ? 0.5 : 1));
+        : priorityColor ?? (selected ? c.textPrimary : color);
 
     return GestureDetector(
       onTap: onTap,
@@ -734,10 +893,21 @@ class _TronTracePainter extends CustomPainter {
 }
 
 /// `0:00 … mid … end` track ruler under the rail.
+/// Time axis under the rail — the visible scroll window as **wall-clock times**
+/// (board epoch + minute), so it reads like a real clock and stays aligned with
+/// the tracks as they auto-follow / pan.
 class _TimeAxis extends StatelessWidget {
-  const _TimeAxis({required this.horizonMins});
+  const _TimeAxis({
+    required this.horizonMins,
+    required this.windowMins,
+    required this.epoch,
+    required this.scroll,
+  });
 
   final int horizonMins;
+  final double windowMins;
+  final DateTime epoch;
+  final _RailScroll scroll;
 
   @override
   Widget build(BuildContext context) {
@@ -746,16 +916,31 @@ class _TimeAxis extends StatelessWidget {
       color: c.textFaint,
       fontSize: kFontXs,
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: kSpaceXs),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: <Widget>[
-          Text('0:00', style: style),
-          Text(_clock(horizonMins / 2), style: style),
-          Text(_clock(horizonMins), style: style),
-        ],
-      ),
+    return BlocBuilder<ServiceClockCubit, ServiceClockState>(
+      builder: (BuildContext context, ServiceClockState clock) {
+        final double viewMins =
+            math.min(horizonMins.toDouble(), windowMins);
+        final double offsetMin = _StationTimeline.offsetFor(
+          scroll,
+          horizonMins,
+          clock.elapsedMins,
+          windowMins,
+        );
+        String at(double min) => TimeOfDay.fromDateTime(
+              epoch.add(Duration(minutes: min.round())),
+            ).format(context);
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: kSpaceXs),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Text(at(offsetMin), style: style),
+              Text(at(offsetMin + viewMins / 2), style: style),
+              Text(at(offsetMin + viewMins), style: style),
+            ],
+          ),
+        );
+      },
     );
   }
 }
@@ -804,6 +989,7 @@ class _Legend extends StatelessWidget {
             Text('plates late', style: style),
           ],
         ),
+        Text('bar colour = ticket', style: style),
         Text('tap a bar for tables', style: style),
       ],
     );

@@ -10,6 +10,7 @@ import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/board/board_widgets.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
+import 'package:kbuzz/features/service/cubit/fired_cooks_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
 /// Reasons offered when sending a line back (TICKETS.md `RECOOK_REASONS`).
@@ -65,6 +66,11 @@ class TicketsPage extends StatelessWidget {
                   .watch<SettingsCubit>()
                   .state
                   .fireImmediately,
+              // Optional: present app-wide (DI), absent in lean widget tests →
+              // empty pins (no pinning, identical schedule).
+              pinnedFireMins:
+                  context.watch<FiredCooksCubit?>()?.state.pinnedFireMins ??
+                      const <String, int>{},
             );
             // Rebuild on each tick so cooking status / under-lamp stay live.
             return BlocBuilder<ServiceClockCubit, ServiceClockState>(
@@ -150,14 +156,12 @@ class _TicketCard extends StatelessWidget {
         ? c.expoLate
         : c.hairline;
 
-    return Container(
+    return TicketStripeCard(
+      // Ticket-colour stripe matching this order's bars on the Stations rail.
+      ticketColor: ticketColor(kot.id),
       margin: const EdgeInsets.only(bottom: kSpaceMd),
       padding: const EdgeInsets.all(kSpaceLg),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(kRadiusLg),
-        border: Border.all(color: border, width: 1.5),
-      ),
+      border: Border.all(color: border, width: 1.5),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
@@ -603,7 +607,6 @@ Future<void> _showLineSheet(
   if (lineId == null) return; // not yet persisted — no stable target
   final KdsColors c = KdsColors.of(context);
   final DemoDataCubit cubit = context.read<DemoDataCubit>();
-  final int reAt = context.read<ServiceClockCubit>().state.elapsedMins.round();
 
   await showModalBottomSheet<void>(
     context: context,
@@ -647,7 +650,7 @@ Future<void> _showLineSheet(
                   tile(
                     Icons.replay,
                     'Recook (send back)…',
-                    () => _showReasonSheet(context, cubit, lineId, reAt),
+                    () => _showReasonSheet(context, cubit, lineId),
                     color: c.expoLate,
                   ),
                 ],
@@ -664,13 +667,14 @@ Future<void> _showLineSheet(
                   tile(
                     Icons.replay,
                     'Recook (send back)…',
-                    () => _showReasonSheet(context, cubit, lineId, reAt),
+                    () => _showReasonSheet(context, cubit, lineId),
                     color: c.expoLate,
                   ),
                   tile(
                     Icons.local_fire_department,
                     'Fire now — missing / expedite',
-                    () => cubit.fireNowLine(lineId, reAtMins: reAt),
+                    () =>
+                        cubit.fireNowLine(lineId, reAtMins: _reAtNow(context)),
                     color: c.brand,
                   ),
                   tile(
@@ -697,12 +701,19 @@ Future<void> _showLineSheet(
   );
 }
 
+/// The board-relative minute a re-fire (fire-now / recook) should land on:
+/// **floor** of the live elapsed so the cook's `fireAt` is never placed past the
+/// current minute (which would defer the fire by up to a minute). Read at the
+/// moment the action is invoked — not when the sheet opens — so it stays accurate
+/// even under fast-forward and after navigating a reason sub-sheet.
+int _reAtNow(BuildContext context) =>
+    context.read<ServiceClockCubit>().state.elapsedMins.floor();
+
 /// Recook reason sub-step.
 Future<void> _showReasonSheet(
   BuildContext context,
   DemoDataCubit cubit,
   String lineId,
-  int reAt,
 ) async {
   final KdsColors c = KdsColors.of(context);
   await showModalBottomSheet<void>(
@@ -732,7 +743,11 @@ Future<void> _showReasonSheet(
               title: Text(reason),
               onTap: () {
                 Navigator.of(sheet).pop();
-                cubit.recookLine(lineId, reason: reason, reAtMins: reAt);
+                cubit.recookLine(
+                  lineId,
+                  reason: reason,
+                  reAtMins: _reAtNow(context),
+                );
               },
             ),
         ],

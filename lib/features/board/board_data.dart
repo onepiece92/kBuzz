@@ -3,6 +3,18 @@ import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/domain/scheduler/models.dart';
 import 'package:kbuzz/domain/scheduler/scheduler.dart' as scheduler;
 
+/// Scheduling horizon for the LIVE boards (kitchen-minutes from the board epoch).
+///
+/// The schedule `now` is pinned to the frozen board epoch (see [BoardData] doc),
+/// so a ticket arriving N minutes into the run maps to relative minute N. The
+/// pure scheduler refuses to place a cook at/after [SchedulerConfig.horizonMins]
+/// (default 120 = HMAX), so with the default an auto-added ticket past ~2h of
+/// run time lands outside the window and never surfaces. We widen the horizon to
+/// a full service day so the auto-drip keeps producing visible work across a
+/// long run. (A truly unbounded service wants the schedule `now` anchored to the
+/// live moment instead — a larger change tracked separately.)
+const int kLiveHorizonMins = 24 * 60; // 24h of service
+
 /// Runs the real [schedule] over a demo bundle and indexes the result for the
 /// boards.
 ///
@@ -26,6 +38,7 @@ class BoardData {
     DemoData data, {
     required DateTime now,
     bool fireImmediately = false,
+    Map<String, int> pinnedFireMins = const <String, int>{},
   }) {
     final Map<String, Dish> menu = <String, Dish>{
       for (final Dish d in data.menu) d.id: d,
@@ -44,8 +57,11 @@ class BoardData {
       // User's cook-timing setting: fire ASAP (start now, no leading idle) or
       // back-schedule so a ticket's dishes plate together (TICKETS.md default).
       config: fireImmediately
-          ? const SchedulerConfig(fireAsap: true)
-          : const SchedulerConfig(justInTime: true),
+          ? const SchedulerConfig(
+              fireAsap: true, horizonMins: kLiveHorizonMins)
+          : const SchedulerConfig(
+              justInTime: true, horizonMins: kLiveHorizonMins),
+      pinnedFireMins: pinnedFireMins,
     );
     // Roll up each ticket's plate status once here. The boards re-read it every
     // clock tick (sorting/filtering tickets); computing it per call would scan

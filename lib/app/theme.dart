@@ -37,6 +37,35 @@ const Map<String, Color> kStationColors = <String, Color>{
   'bar': Color(0xFF14B8A6),
 };
 
+/// Ticket-identity palette: a stable, vivid colour per ticket so all of an
+/// order's cooks share one bar colour **across stations** — letting the kitchen
+/// trace one ticket down the Stations rail. Deliberately avoids red / orange /
+/// amber / white, which a dish bar reserves for *status* (plates-late, rush /
+/// recook, holding, selected) so grouping never reads as an alert.
+const List<Color> kTicketColors = <Color>[
+  Color(0xFF60A5FA), // blue
+  Color(0xFFA78BFA), // violet
+  Color(0xFFF472B6), // pink
+  Color(0xFF34D399), // emerald
+  Color(0xFF22D3EE), // cyan
+  Color(0xFF818CF8), // indigo
+  Color(0xFF2DD4BF), // teal
+  Color(0xFFC084FC), // purple
+  Color(0xFF4ADE80), // green
+  Color(0xFFE879F9), // fuchsia
+];
+
+/// Stable [kTicketColors] entry for a ticket id — deterministic across runs and
+/// platforms (a hand-rolled hash, not `String.hashCode`), so the same ticket
+/// always maps to the same colour within and between sessions.
+Color ticketColor(String kotId) {
+  int h = 0;
+  for (final int unit in kotId.codeUnits) {
+    h = (h * 31 + unit) & 0x7fffffff;
+  }
+  return kTicketColors[h % kTicketColors.length];
+}
+
 /// Expo / ticket status palette — the colours the **waiter** boards use to flag a
 /// line's plate state. Defined once here so a rebrand is a single edit (the
 /// Tickets page and the shared [NoteLine] reference these, not raw hex).
@@ -44,17 +73,27 @@ const Map<String, Color> kStationColors = <String, Color>{
 /// Distinct from the kitchen-side *slack* palette in `board_widgets.dart`
 /// (planned hold/late/on-time), which encodes scheduler slack rather than expo
 /// state — keep the two separate.
-const Color kStatusReady = Color(0xFF39FF88); // neon green — all lines plated/ready
+const Color kStatusReady = Color(
+  0xFF39FF88,
+); // neon green — all lines plated/ready
 const Color kStatusHeld = Color(0xFFFBBF24); // amber — held / special note
 const Color kStatusLate = Color(0xFFFF4D6D); // neon red — past target
 const Color kStatusFiring = KBuzzColors.brandPrimary; // orange — rush / firing
+
+/// Legible ink for text/icons placed on a **brand-coloured fill** (e.g. a
+/// selected chip). The brand orange is too light for white text (~2.7:1) and the
+/// fill is orange in both themes, so this is a near-black that clears WCAG AA
+/// (~6:1) on the brand in both the neon and pastel palettes.
+const Color kOnBrand = Color(0xFF1C1917);
 
 /// Kitchen "slack / live" palette — the kitchen-side colours for a cook's timing
 /// and shared accents (distinct from the waiter-side expo palette above). These
 /// are the single source of truth for the boards' status colours; retheme here.
 const Color kDanger = Color(0xFFFF4D6D); // neon red — late / bottleneck / error
 const Color kSlackHold = Color(0xFF33A1FF); // neon blue — can hold
-const Color kSuccess = Color(0xFF39FF88); // neon green — on time / ready / success
+const Color kSuccess = Color(
+  0xFF39FF88,
+); // neon green — on time / ready / success
 const Color kSlackCook = Color(0xFFFFD60A); // neon amber — cooking
 const Color kHoldStripe = Color(0xFFFDE68A); // pale amber — holding edge marker
 const Color kSwatchGrey = Color(0xFF94A3B8); // neutral legend swatch
@@ -84,6 +123,7 @@ const Color _pastelGrey = Color(0xFF94A3B8);
 class KdsColors extends ThemeExtension<KdsColors> {
   const KdsColors({
     required this.brand,
+    required this.onBrand,
     required this.expoReady,
     required this.expoHeld,
     required this.expoLate,
@@ -105,6 +145,7 @@ class KdsColors extends ThemeExtension<KdsColors> {
   });
 
   final Color brand; // CTA / firing / rush accent
+  final Color onBrand; // legible ink for text/icons on a brand fill
   final Color expoReady; // waiter: all lines plated
   final Color expoHeld; // waiter: held / special note
   final Color expoLate; // waiter: past target
@@ -127,6 +168,7 @@ class KdsColors extends ThemeExtension<KdsColors> {
   /// Neon palette — the dark KDS board.
   static const KdsColors neon = KdsColors(
     brand: kStatusFiring,
+    onBrand: kOnBrand,
     expoReady: kStatusReady,
     expoHeld: kStatusHeld,
     expoLate: kStatusLate,
@@ -150,6 +192,7 @@ class KdsColors extends ThemeExtension<KdsColors> {
   /// Pastel palette — the light theme.
   static const KdsColors pastel = KdsColors(
     brand: _pastelBrand,
+    onBrand: kOnBrand,
     expoReady: _pastelReady,
     expoHeld: _pastelHeld,
     expoLate: _pastelLate,
@@ -177,6 +220,7 @@ class KdsColors extends ThemeExtension<KdsColors> {
   @override
   KdsColors copyWith({
     Color? brand,
+    Color? onBrand,
     Color? expoReady,
     Color? expoHeld,
     Color? expoLate,
@@ -195,34 +239,35 @@ class KdsColors extends ThemeExtension<KdsColors> {
     Color? hairline,
     Color? hairlineStrong,
     Color? scrim,
-  }) =>
-      KdsColors(
-        brand: brand ?? this.brand,
-        expoReady: expoReady ?? this.expoReady,
-        expoHeld: expoHeld ?? this.expoHeld,
-        expoLate: expoLate ?? this.expoLate,
-        danger: danger ?? this.danger,
-        slackHold: slackHold ?? this.slackHold,
-        slackCook: slackCook ?? this.slackCook,
-        success: success ?? this.success,
-        holdStripe: holdStripe ?? this.holdStripe,
-        swatchGrey: swatchGrey ?? this.swatchGrey,
-        board: board ?? this.board,
-        surface: surface ?? this.surface,
-        textPrimary: textPrimary ?? this.textPrimary,
-        textSecondary: textSecondary ?? this.textSecondary,
-        textMuted: textMuted ?? this.textMuted,
-        textFaint: textFaint ?? this.textFaint,
-        hairline: hairline ?? this.hairline,
-        hairlineStrong: hairlineStrong ?? this.hairlineStrong,
-        scrim: scrim ?? this.scrim,
-      );
+  }) => KdsColors(
+    brand: brand ?? this.brand,
+    onBrand: onBrand ?? this.onBrand,
+    expoReady: expoReady ?? this.expoReady,
+    expoHeld: expoHeld ?? this.expoHeld,
+    expoLate: expoLate ?? this.expoLate,
+    danger: danger ?? this.danger,
+    slackHold: slackHold ?? this.slackHold,
+    slackCook: slackCook ?? this.slackCook,
+    success: success ?? this.success,
+    holdStripe: holdStripe ?? this.holdStripe,
+    swatchGrey: swatchGrey ?? this.swatchGrey,
+    board: board ?? this.board,
+    surface: surface ?? this.surface,
+    textPrimary: textPrimary ?? this.textPrimary,
+    textSecondary: textSecondary ?? this.textSecondary,
+    textMuted: textMuted ?? this.textMuted,
+    textFaint: textFaint ?? this.textFaint,
+    hairline: hairline ?? this.hairline,
+    hairlineStrong: hairlineStrong ?? this.hairlineStrong,
+    scrim: scrim ?? this.scrim,
+  );
 
   @override
   KdsColors lerp(ThemeExtension<KdsColors>? other, double t) {
     if (other is! KdsColors) return this;
     return KdsColors(
       brand: Color.lerp(brand, other.brand, t)!,
+      onBrand: Color.lerp(onBrand, other.onBrand, t)!,
       expoReady: Color.lerp(expoReady, other.expoReady, t)!,
       expoHeld: Color.lerp(expoHeld, other.expoHeld, t)!,
       expoLate: Color.lerp(expoLate, other.expoLate, t)!,
@@ -292,12 +337,12 @@ ThemeData buildKBuzzTheme(Brightness brightness) {
   final KdsColors kc = dark ? KdsColors.neon : KdsColors.pastel;
   final ColorScheme scheme =
       (dark ? const ColorScheme.dark() : const ColorScheme.light()).copyWith(
-    primary: kc.brand,
-    onPrimary: Colors.white,
-    secondary: KBuzzColors.brandSecondary,
-    surface: kc.surface,
-    onSurface: kc.textPrimary,
-  );
+        primary: kc.brand,
+        onPrimary: Colors.white,
+        secondary: KBuzzColors.brandSecondary,
+        surface: kc.surface,
+        onSurface: kc.textPrimary,
+      );
 
   return ThemeData(
     useMaterial3: true,

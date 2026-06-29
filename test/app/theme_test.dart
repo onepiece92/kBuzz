@@ -66,4 +66,39 @@ void main() {
       expect(ThemeData(useMaterial3: true).extension<KdsColors>(), isNull);
     });
   });
+
+  group('ticketColor', () {
+    test('is deterministic for a given ticket id', () {
+      expect(ticketColor('kot-7'), ticketColor('kot-7'));
+      expect(ticketColor('abc-123'), ticketColor('abc-123'));
+    });
+
+    test('always resolves to a palette entry', () {
+      for (final String id in <String>['a', 'kot-1', 'D21', 'xyz', '']) {
+        expect(kTicketColors, contains(ticketColor(id)));
+      }
+    });
+
+    test('spreads distinct ids across the palette', () {
+      final Set<Color> seen = <Color>{
+        for (int i = 0; i < 40; i++) ticketColor('kot-$i'),
+      };
+      // Not all collapse to one bucket (well-distributed hash).
+      expect(seen.length, greaterThan(3));
+    });
+
+    test('palette avoids the status hues the bar reserves', () {
+      // Grouping must never read as an alert: no red/orange/amber/white.
+      final Set<Color> reserved = <Color>{
+        kStatusLate, // late (red)
+        kStatusFiring, // rush / firing (orange)
+        kSlackCook, // amber
+        kHoldStripe, // holding amber
+        Colors.white, // selected
+      };
+      for (final Color c in kTicketColors) {
+        expect(reserved, isNot(contains(c)));
+      }
+    });
+  });
 }

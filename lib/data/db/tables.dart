@@ -47,6 +47,23 @@ class Kots extends Table with SyncCols {
   BoolColumn get rush => boolean().withDefault(const Constant(false))();
 }
 
+/// Single-row board session metadata: the durable board epoch + run speed, so a
+/// restart resumes the run at true wall time instead of re-stamping `now`. One
+/// row with a fixed id (`'board'`); written atomically with the board snapshot.
+/// Both nullable so a partial row can exist (epoch set before speed, etc).
+/// Schema v4.
+@DataClassName('BoardMetaRow')
+class BoardMeta extends Table with SyncCols {
+  /// Board epoch as **milliseconds** since the Unix epoch. Stored as int (not a
+  /// `DateTimeColumn`, whose Drift default is epoch *seconds*) so re-anchoring
+  /// the monotonic clock keeps sub-second fidelity.
+  IntColumn get epochMs => integer().nullable()();
+
+  /// The run-speed multiplier in effect, so a restart resumes at the same rate
+  /// (`elapsed = (now − epoch) × speed`) rather than the in-memory default.
+  IntColumn get speed => integer().nullable()();
+}
+
 /// Ticket lines. Row class `OrderLineRow` ↔ domain `OrderLine`.
 @DataClassName('OrderLineRow')
 class OrderLines extends Table with SyncCols {

@@ -29,6 +29,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // The demo-data card (with the badge) sits below the settings card in the
+    // ListView — scroll it into view first.
+    await tester.scrollUntilVisible(
+      find.text('AI OFF'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+
     // No key yet → badge is off.
     expect(find.text('AI OFF'), findsOneWidget);
     expect(find.textContaining('AI ·'), findsNothing);

@@ -18,3 +18,32 @@ class SystemClock extends Clock {
   @override
   DateTime now() => DateTime.now();
 }
+
+/// Monotonic elapsed-time source, independent of the wall clock.
+///
+/// The run clock measures in-session elapsed against this so a device wall-clock
+/// change (NTP sync / DST / a manual edit) can't move the board mid-service.
+/// It is **never persisted** — a monotonic source resets on process death /
+/// reboot, which is why durable anchors stay absolute wall timestamps and the
+/// run clock re-anchors monotonic→wall on start / cold-start / resume.
+abstract class MonotonicClock {
+  const MonotonicClock();
+
+  /// Elapsed time since this clock began counting (no fixed zero point — only
+  /// differences are meaningful).
+  Duration elapsed();
+}
+
+/// Production [MonotonicClock] backed by a single `dart:core` [Stopwatch] (no
+/// plugin). The stopwatch starts the first time [elapsed] is read.
+class StopwatchMonotonicClock extends MonotonicClock {
+  StopwatchMonotonicClock();
+
+  final Stopwatch _sw = Stopwatch();
+
+  @override
+  Duration elapsed() {
+    if (!_sw.isRunning) _sw.start();
+    return _sw.elapsed;
+  }
+}

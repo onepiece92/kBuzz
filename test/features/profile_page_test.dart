@@ -39,6 +39,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // The Profile sections are collapsible and all start collapsed; tap a section
+  // header to open it before interacting with its body.
+  Future<void> expand(WidgetTester tester, String title) async {
+    await tester.scrollUntilVisible(
+      find.text(title),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text(title));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets(
       'API key card: entering a key + Save persists it and flips AI features on',
       (WidgetTester tester) async {
@@ -48,6 +60,7 @@ void main() {
     addTearDown(settings.close);
 
     await pumpProfile(tester, demo: demo, settings: settings);
+    await expand(tester, 'Claude API key');
 
     // No key yet → the in-card indicator reads off.
     expect(find.text('AI features off'), findsOneWidget);
@@ -79,6 +92,7 @@ void main() {
     addTearDown(settings.close);
 
     await pumpProfile(tester, demo: demo, settings: settings);
+    await expand(tester, 'Claude API key');
     expect(find.text('AI features on'), findsOneWidget);
 
     await tester.ensureVisible(find.widgetWithText(FilledButton, 'Save'));
@@ -96,7 +110,7 @@ void main() {
     await flush(tester);
   });
 
-  testWidgets('API key card: the visibility toggle unmasks the field',
+  testWidgets('API key card: the field is always masked, with no reveal icon',
       (WidgetTester tester) async {
     final DemoDataCubit demo = DemoDataCubit();
     final SettingsCubit settings = SettingsCubit();
@@ -104,18 +118,15 @@ void main() {
     addTearDown(settings.close);
 
     await pumpProfile(tester, demo: demo, settings: settings);
+    await expand(tester, 'Claude API key');
 
     await tester.ensureVisible(find.byType(TextField));
     await tester.pumpAndSettle();
 
-    // The key field is obscured by default.
+    // Write-only: always obscured, and no show/hide eye to reveal it.
     expect(tester.widget<TextField>(find.byType(TextField)).obscureText, isTrue);
-
-    // Tapping the eye reveals it.
-    await tester.tap(find.byIcon(Icons.visibility));
-    await tester.pump();
-    expect(
-        tester.widget<TextField>(find.byType(TextField)).obscureText, isFalse);
+    expect(find.byIcon(Icons.visibility), findsNothing);
+    expect(find.byIcon(Icons.visibility_off), findsNothing);
   });
 
   testWidgets('demo-data card: Generate populates the board (no AI → sample)',
@@ -128,6 +139,7 @@ void main() {
     await pumpProfile(tester, demo: demo, settings: settings);
     expect(demo.state.data, isNull);
 
+    await expand(tester, 'Demo data');
     await tester.tap(find.text('Generate demo data'));
     await tester.pumpAndSettle();
 

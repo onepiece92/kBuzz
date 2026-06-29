@@ -9,6 +9,7 @@ class _FakeTts implements TtsEngine {
   final List<String> spoken = <String>[];
   final List<Completer<void>> _inFlight = <Completer<void>>[];
   bool? awaitSet;
+  int stops = 0;
 
   @override
   Future<void> awaitCompletion(bool value) async => awaitSet = value;
@@ -19,6 +20,16 @@ class _FakeTts implements TtsEngine {
     final Completer<void> c = Completer<void>();
     _inFlight.add(c);
     return c.future;
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    // Interrupting resolves the in-flight utterance(s), unblocking the loop.
+    for (final Completer<void> c in _inFlight) {
+      if (!c.isCompleted) c.complete();
+    }
+    _inFlight.clear();
   }
 
   /// Finish the oldest still-speaking utterance.
@@ -83,5 +94,41 @@ void main() {
 
     tts.finish();
     await pumpEventQueue();
+  });
+
+  test('a hung utterance times out so later fires still speak', () async {
+    // Without the timeout, the first never-completing speak() leaves _draining
+    // stuck true and silences every later fire for the rest of the run.
+    final _FakeTts tts = _FakeTts();
+    final SystemAnnouncer ann = SystemAnnouncer(
+      engine: tts,
+      speakTimeout: const Duration(milliseconds: 20),
+    );
+
+    unawaited(ann.announce('one')); // never finished → times out, loop continues
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await pumpEventQueue();
+    unawaited(ann.announce('two')); // must still reach the engine
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+    await pumpEventQueue();
+
+    expect(tts.spoken, containsAll(<String>['one', 'two']));
+  });
+
+  test('stop() drops the queue and cuts the current utterance', () async {
+    final _FakeTts tts = _FakeTts();
+    final SystemAnnouncer ann = SystemAnnouncer(engine: tts);
+
+    unawaited(ann.announce('a')); // starts speaking; 'a' in flight
+    unawaited(ann.announce('b')); // queued
+    unawaited(ann.announce('c')); // queued
+    await pumpEventQueue();
+    expect(tts.spoken, <String>['a']);
+
+    await ann.stop(); // mute: drop b/c + interrupt 'a'
+    await pumpEventQueue();
+
+    expect(tts.stops, greaterThanOrEqualTo(1));
+    expect(tts.spoken, <String>['a']); // b/c never spoke
   });
 }

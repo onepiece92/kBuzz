@@ -12,38 +12,45 @@ import 'package:kbuzz/core/result.dart';
 /// (or [success] / [error] / [failure]) for normal messages, and [fire] for the
 /// bold "fire next" alert (§10.5).
 ///
-/// It renders into the **root** overlay, so a toast floats above the tab shell,
-/// full-screen routes (e.g. scan), and dialogs alike. Only one toast is visible
-/// at a time — showing a new one replaces the current.
+/// It renders into the **root** overlay, so toasts float above the tab shell,
+/// full-screen routes (e.g. scan), and dialogs alike. Toasts **stack**: a new one
+/// appears *below* the ones already showing — including [fire] alerts — each on
+/// its own auto-dismiss timer; when one closes the rest move up. A burst is
+/// capped (oldest dropped) so the stack can't grow without bound.
 abstract final class AppToast {
-  /// The currently-visible toast, if any. Replaced on each insert.
-  static OverlayEntry? _current;
+  /// The live stack, oldest first (top) → newest last (bottom).
+  static final List<_ToastModel> _models = <_ToastModel>[];
 
-  /// Animated-close of the visible toast, registered by [_AppToastView] while
-  /// it's on screen. Lets [dismiss] slide it out the same way the ✕ does.
-  static VoidCallback? _activeClose;
+  /// Per-toast controllers, registered by each [_AppToastView] while mounted
+  /// (keyed by model id), so [dismiss] / [retime] / the fire content-swap can
+  /// reach a specific toast.
+  static final Map<int, _ToastHandle> _handles = <int, _ToastHandle>{};
 
-  /// Animate out the active toast, if any (e.g. the run was paused or reset).
-  /// A no-op when nothing is showing. Distinct from the private [_dismiss],
-  /// which removes instantly (no exit animation) for the replacement path.
-  static void dismiss() => _activeClose?.call();
+  /// The single overlay entry that renders the whole stack.
+  static OverlayEntry? _entry;
 
-  /// Re-time hook of the active *fire* toast — registered by [_AppToastView]
-  /// only when it opted in (the [fire] toast). Lets [retime] reschedule the
-  /// auto-dismiss when the hold time changes while one is on screen.
-  static void Function(Duration hold)? _activeRetime;
+  static int _nextId = 0;
 
-  /// Reschedule the active fire toast's auto-dismiss to [hold] from now — used
-  /// when the fire-toast display time is changed live (Profile → Settings). A
-  /// no-op when nothing is showing or the visible toast isn't a fire toast.
-  static void retime(Duration hold) => _activeRetime?.call(hold);
+  /// Cap on simultaneous toasts; older non-fire toasts are dropped past this so
+  /// a burst can't grow the stack without bound.
+  static const int _maxVisible = 4;
 
-  /// Content-swap hook of the active *fire* toast — registered by [_AppToastView]
-  /// only for the fire toast. Lets a newer fire replace the visible content
-  /// **without** restarting the auto-dismiss, so the display time is a hard cap
-  /// from first appearance (not re-armed by every fire). Returns false if the
-  /// toast is gone/closing, so [fire] opens a fresh one instead.
-  static bool Function(Widget child)? _activeSetContent;
+  /// Animate out **every** visible toast (e.g. the run was paused or reset).
+  /// A no-op when nothing is showing.
+  static void dismiss() {
+    for (final _ToastHandle h in _handles.values.toList()) {
+      h.close();
+    }
+  }
+
+  /// Reschedule the visible **fire** toast's auto-dismiss to [hold] from now —
+  /// used when the fire-toast display time is changed live (Profile → Settings).
+  /// A no-op when no fire toast is up; never touches normal toasts.
+  static void retime(Duration hold) {
+    for (final _ToastModel m in _models) {
+      if (m.retimeable) _handles[m.id]?.retime(hold);
+    }
+  }
 
   /// Show [message] as a top toast of the given [type].
   static void show(
@@ -75,12 +82,12 @@ abstract final class AppToast {
     Duration duration = const Duration(seconds: 3),
     String? note,
   }) => show(
-        context,
-        message,
-        type: AppToastType.success,
-        duration: duration,
-        note: note,
-      );
+    context,
+    message,
+    type: AppToastType.success,
+    duration: duration,
+    note: note,
+  );
 
   /// Convenience: a red error toast. [note] is an optional second line.
   static void error(
@@ -89,12 +96,12 @@ abstract final class AppToast {
     Duration duration = const Duration(seconds: 4),
     String? note,
   }) => show(
-        context,
-        message,
-        type: AppToastType.error,
-        duration: duration,
-        note: note,
-      );
+    context,
+    message,
+    type: AppToastType.error,
+    duration: duration,
+    note: note,
+  );
 
   /// Convenience: surface an [AppFailure]'s user-safe message as an error toast.
   static void failure(
@@ -105,11 +112,12 @@ abstract final class AppToast {
   }) => error(context, failure.message, duration: duration, note: note);
 
   /// The bold **"fire next"** alert (§10.5): big mono qty + dish + station per
-  /// item, brand-orange accent, held 3 minutes (or until dismissed/replaced).
+  /// item, brand-orange accent, held for [duration] (the Profile hold time).
   /// Itemises the whole same-tick batch so simultaneous multi-station fires are
-  /// all shown (the list scrolls if it outgrows the screen). Tappable anywhere —
-  /// or via the corner ✕ — to dismiss. A newer fire replaces it. Pairs with the
-  /// spoken [Announcer] announcement. Still a top toast.
+  /// all shown in one toast (the list scrolls if it outgrows the screen).
+  /// Tappable anywhere — or via the corner ✕ — to dismiss. A later fire **stacks**
+  /// as its own toast with its own countdown. Pairs with the spoken [Announcer]
+  /// announcement. Still a top toast.
   static void fire(
     BuildContext context, {
     required List<FireToastItem> items,
@@ -117,12 +125,10 @@ abstract final class AppToast {
     String? note,
   }) {
     if (items.isEmpty) return;
-    // If a fire toast is already up, swap in the newest batch but keep its
-    // running countdown — so the display time caps total visibility instead of
-    // restarting on every fire (which, under the fast service clock, kept it up
-    // until the rush ended). Falls through to a fresh toast once it has closed.
-    final bool Function(Widget)? swap = _activeSetContent;
-    if (swap != null && swap(_FireContent(items: items, note: note))) return;
+    // Each fire batch is its OWN stacked toast with its OWN expire timer (the
+    // Profile hold time), so a later fire never inherits an earlier one's
+    // leftover countdown — they stack and each counts down independently. A dense
+    // rush is bounded by the stack cap (oldest dropped).
     _insert(
       context,
       accent: KdsColors.of(context).brand,
@@ -133,6 +139,7 @@ abstract final class AppToast {
     );
   }
 
+  /// Append a toast to the bottom of the stack.
   static void _insert(
     BuildContext context, {
     required Color accent,
@@ -141,35 +148,75 @@ abstract final class AppToast {
     bool showClose = false,
     bool retimeable = false,
   }) {
-    // Root overlay so the toast clears the nav shell / full-screen routes / dialogs.
-    final OverlayState overlay = Overlay.of(context, rootOverlay: true);
-    _dismiss();
-
-    late final OverlayEntry entry;
-    entry = OverlayEntry(
-      builder: (BuildContext context) => _AppToastView(
+    _ensureEntry(context);
+    _models.add(
+      _ToastModel(
+        id: _nextId++,
         accent: accent,
         duration: duration,
+        child: child,
         showClose: showClose,
         retimeable: retimeable,
-        // Only remove if this entry is still the active one — a newer toast may
-        // have replaced it before its timer fired.
-        onDismissed: () {
-          if (_current == entry) _current = null;
-          entry.remove();
-        },
-        child: child,
       ),
     );
+    // Keep the most recent [_maxVisible]; drop the oldest so a burst (e.g. a
+    // dense fire rush) can't grow the stack without bound. Removing a model
+    // disposes its view, cancelling its timer.
+    while (_models.length > _maxVisible) {
+      _models.removeAt(0);
+    }
+    _entry!.markNeedsBuild();
+  }
 
-    _current = entry;
+  /// Lazily create the one overlay entry that renders the stack; reused until the
+  /// stack empties. Root overlay so toasts clear the nav shell / routes / dialogs.
+  static void _ensureEntry(BuildContext context) {
+    if (_entry != null) return;
+    final OverlayState overlay = Overlay.of(context, rootOverlay: true);
+    final OverlayEntry entry = OverlayEntry(builder: _buildStack);
+    _entry = entry;
     overlay.insert(entry);
   }
 
-  /// Immediately remove the active toast (if any), no exit animation.
-  static void _dismiss() {
-    _current?.remove();
-    _current = null;
+  /// Remove a dismissed toast (after its exit animation) and tear the overlay
+  /// down once the stack is empty.
+  static void _remove(int id) {
+    _models.removeWhere((_ToastModel m) => m.id == id);
+    _handles.remove(id);
+    if (_models.isEmpty) {
+      _entry?.remove();
+      _entry = null;
+    } else {
+      _entry?.markNeedsBuild();
+    }
+  }
+
+  /// Build the stacked toasts: a top-anchored column, oldest first. Re-runs on
+  /// every [OverlayEntry.markNeedsBuild]; the [ValueKey]s preserve each toast's
+  /// animation + timer state across rebuilds.
+  static Widget _buildStack(BuildContext context) {
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(kSpaceMd, kSpaceSm, kSpaceMd, 0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              for (final _ToastModel m in _models)
+                _AppToastView(
+                  key: ValueKey<int>(m.id),
+                  model: m,
+                  onDismissed: () => _remove(m.id),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -186,36 +233,57 @@ enum AppToastType {
   /// Resolve this severity's theme-aware accent colour. An enum constant can't
   /// hold a [KdsColors] field, so the colour is mapped from the active set here.
   Color accentOf(KdsColors c) => switch (this) {
-        AppToastType.info => c.brand,
-        AppToastType.success => c.success,
-        AppToastType.error => c.danger,
-      };
+    AppToastType.info => c.brand,
+    AppToastType.success => c.success,
+    AppToastType.error => c.danger,
+  };
+}
+
+/// One stacked toast's data. [child] is mutable so a newer fire can swap its
+/// content in place; [retimeable] marks the single fire toast (it registers
+/// retime + content-swap and is preserved when the stack is capped).
+class _ToastModel {
+  _ToastModel({
+    required this.id,
+    required this.accent,
+    required this.duration,
+    required this.child,
+    required this.showClose,
+    required this.retimeable,
+  });
+
+  final int id;
+  final Color accent;
+  final Duration duration;
+  final Widget child;
+  final bool showClose;
+
+  /// Marks the fire toast: it registers [retime] (so a live hold-time change
+  /// reschedules it) — the [AppToast.retime] target.
+  final bool retimeable;
+}
+
+/// Live controls for one mounted toast, registered in [AppToast._handles] by its
+/// [_AppToastView] so the static API can reach a specific toast in the stack.
+class _ToastHandle {
+  _ToastHandle({required this.close, required this.retime});
+
+  final VoidCallback close;
+  final void Function(Duration hold) retime;
 }
 
 /// The animated toast surface: slides down from the top edge, holds, then slides
-/// back up and removes itself via [onDismissed]. Renders [child] inside the
-/// shared chrome (rounded card, accent stripe, tap-to-dismiss).
+/// back up and removes itself via [onDismissed]. One per entry in the stack;
+/// positioning/spacing is owned by [AppToast._buildStack].
 class _AppToastView extends StatefulWidget {
   const _AppToastView({
-    required this.accent,
-    required this.duration,
+    super.key,
+    required this.model,
     required this.onDismissed,
-    required this.child,
-    this.showClose = false,
-    this.retimeable = false,
   });
 
-  final Color accent;
-  final Duration duration;
+  final _ToastModel model;
   final VoidCallback onDismissed;
-  final Widget child;
-
-  /// Whether to overlay a tap-target ✕ in the top-right corner.
-  final bool showClose;
-
-  /// Whether this toast registers [AppToast._activeRetime], letting a live hold
-  /// change reschedule its auto-dismiss (the fire toast opts in).
-  final bool retimeable;
 
   @override
   State<_AppToastView> createState() => _AppToastViewState();
@@ -238,26 +306,27 @@ class _AppToastViewState extends State<_AppToastView>
 
   Timer? _dismissTimer;
   bool _closing = false;
-  late Widget _child;
 
   @override
   void initState() {
     super.initState();
-    _child = widget.child;
-    AppToast._activeClose = _close; // so AppToast.dismiss() can animate us out
-    if (widget.retimeable) {
-      AppToast._activeRetime = _retime;
-      AppToast._activeSetContent = _setContent;
-    }
+    // Register this toast's live controls (ids are unique + never reused).
+    AppToast._handles[widget.model.id] = _ToastHandle(
+      close: _close,
+      retime: _retime,
+    );
     _controller.forward();
-    _scheduleDismiss(widget.duration);
+    _scheduleDismiss(widget.model.duration);
   }
 
   /// (Re)arm the auto-dismiss to fire [hold] from now (plus the slide
   /// animation), cancelling any prior timer.
   void _scheduleDismiss(Duration hold) {
     _dismissTimer?.cancel();
-    _dismissTimer = Timer(hold + (_controller.duration ?? Duration.zero), _close);
+    _dismissTimer = Timer(
+      hold + (_controller.duration ?? Duration.zero),
+      _close,
+    );
   }
 
   /// Live re-time from a settings change: keep this toast up for [hold] more,
@@ -265,15 +334,6 @@ class _AppToastViewState extends State<_AppToastView>
   void _retime(Duration hold) {
     if (!mounted || _closing) return;
     _scheduleDismiss(hold);
-  }
-
-  /// Swap the toast's content in place, leaving the auto-dismiss timer running —
-  /// a newer fire updates the visible toast without extending it. Returns false
-  /// if this toast is gone/closing, so the caller opens a fresh one instead.
-  bool _setContent(Widget child) {
-    if (!mounted || _closing) return false;
-    setState(() => _child = child);
-    return true;
   }
 
   Future<void> _close() async {
@@ -287,11 +347,7 @@ class _AppToastViewState extends State<_AppToastView>
   @override
   void dispose() {
     _dismissTimer?.cancel();
-    if (AppToast._activeClose == _close) AppToast._activeClose = null;
-    if (AppToast._activeRetime == _retime) AppToast._activeRetime = null;
-    if (AppToast._activeSetContent == _setContent) {
-      AppToast._activeSetContent = null;
-    }
+    AppToast._handles.remove(widget.model.id);
     _controller.dispose();
     super.dispose();
   }
@@ -299,74 +355,67 @@ class _AppToastViewState extends State<_AppToastView>
   @override
   Widget build(BuildContext context) {
     final KdsColors c = KdsColors.of(context);
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: SafeArea(
-        bottom: false,
-        child: SlideTransition(
-          position: _offset,
-          child: FadeTransition(
-            opacity: _controller,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(kSpaceMd, kSpaceSm, kSpaceMd, 0),
-              child: Align(
-                alignment: Alignment.topCenter,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 480),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: GestureDetector(
-                      onTap: _close,
-                      child: Stack(
-                        children: <Widget>[
-                          Container(
-                            decoration: BoxDecoration(
-                              color: c.surface,
-                              borderRadius: BorderRadius.circular(kRadiusLg),
-                              border: Border(
-                                left: BorderSide(
-                                  color: widget.accent,
-                                  width: 4,
-                                ),
-                              ),
-                              boxShadow: <BoxShadow>[
-                                BoxShadow(
-                                  color: c.scrim,
-                                  blurRadius: 16,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+    return SlideTransition(
+      position: _offset,
+      child: FadeTransition(
+        opacity: _controller,
+        // Gap below each card so stacked toasts read as separate.
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: kSpaceSm),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Material(
+                color: Colors.transparent,
+                child: GestureDetector(
+                  onTap: _close,
+                  child: Stack(
+                    children: <Widget>[
+                      Container(
+                        decoration: BoxDecoration(
+                          color: c.surface,
+                          borderRadius: BorderRadius.circular(kRadiusLg),
+                          border: Border(
+                            left: BorderSide(
+                              color: widget.model.accent,
+                              width: 4,
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 14,
-                              vertical: 12,
-                            ),
-                            child: _child,
                           ),
-                          if (widget.showClose)
-                            Positioned(
-                              top: 2,
-                              right: 2,
-                              child: IconButton(
-                                onPressed: _close,
-                                iconSize: 18,
-                                padding: EdgeInsets.zero,
-                                visualDensity: VisualDensity.compact,
-                                constraints: const BoxConstraints(
-                                  minWidth: 36,
-                                  minHeight: 36,
-                                ),
-                                splashRadius: 20,
-                                color: c.textSecondary,
-                                tooltip: 'Dismiss',
-                                icon: const Icon(Icons.close),
-                              ),
+                          boxShadow: <BoxShadow>[
+                            BoxShadow(
+                              color: c.scrim,
+                              blurRadius: 16,
+                              offset: const Offset(0, 4),
                             ),
-                        ],
+                          ],
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
+                        child: widget.model.child,
                       ),
-                    ),
+                      if (widget.model.showClose)
+                        Positioned(
+                          top: 2,
+                          right: 2,
+                          child: IconButton(
+                            onPressed: _close,
+                            iconSize: 18,
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
+                            constraints: const BoxConstraints(
+                              minWidth: 36,
+                              minHeight: 36,
+                            ),
+                            splashRadius: 20,
+                            color: c.textSecondary,
+                            tooltip: 'Dismiss',
+                            icon: const Icon(Icons.close),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -400,8 +449,9 @@ class _MessageContent extends StatelessWidget {
     final String? note = this.note;
     final bool hasNote = note != null && note.isNotEmpty;
     return Row(
-      crossAxisAlignment:
-          hasNote ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      crossAxisAlignment: hasNote
+          ? CrossAxisAlignment.start
+          : CrossAxisAlignment.center,
       children: <Widget>[
         Icon(icon, color: accent, size: 22),
         const SizedBox(width: kSpaceMd),
@@ -501,11 +551,7 @@ class _FireContent extends StatelessWidget {
               children: <Widget>[
                 for (int i = 0; i < items.length; i++) ...<Widget>[
                   if (i > 0)
-                    Divider(
-                      height: 14,
-                      thickness: 1,
-                      color: c.hairline,
-                    ),
+                    Divider(height: 14, thickness: 1, color: c.hairline),
                   _FireRow(item: items[i]),
                 ],
               ],

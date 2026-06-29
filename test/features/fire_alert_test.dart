@@ -10,6 +10,7 @@ ScheduledDish _dish({
   String name = 'Dish',
   int qty = 1,
   PriorityKind priority = PriorityKind.none,
+  int reFireSeq = 0,
   List<String> kotIds = const <String>[],
   Map<String, String> notes = const <String, String>{},
 }) =>
@@ -39,6 +40,7 @@ ScheduledDish _dish({
       lateMins: 0,
       lane: 0,
       priority: priority,
+      reFireSeq: reFireSeq,
     );
 
 void main() {
@@ -80,7 +82,7 @@ void main() {
       expect(t0.single.dishName, 'Burger');
       expect(t0.single.stationName, 'Grill');
       expect(t0.single.qty, 2);
-      expect(t0.single.spokenText, 'Fire Grill — 2 Burger');
+      expect(t0.single.spokenText, 'Grill — 2 Burger');
 
       // Still minute 0 a tick later → nothing new (edge-triggered, once-only).
       expect(
@@ -175,6 +177,53 @@ void main() {
       );
       expect(fireKey(recook), isNot(fireKey(normal)));
     });
+
+    test('two re-fires in the SAME minute key distinctly (reFireSeq, not fireAt)',
+        () {
+      // Double-tap fire-now / a second send-back within one board minute: same
+      // fireAt, but the bumped reFireSeq makes each a distinct cook.
+      final ScheduledDish first = _dish(
+        dishId: 'steak',
+        stationId: 'grill',
+        fireAt: 5,
+        kotIds: <String>['t1'],
+        priority: PriorityKind.fireNow,
+        reFireSeq: 1,
+      );
+      final ScheduledDish second = _dish(
+        dishId: 'steak',
+        stationId: 'grill',
+        fireAt: 5, // identical minute
+        kotIds: <String>['t1'],
+        priority: PriorityKind.fireNow,
+        reFireSeq: 2, // bumped
+      );
+      expect(fireKey(second), isNot(fireKey(first)));
+    });
+
+    test('a second re-fire at the same minute re-announces (not swallowed)', () {
+      final Set<String> alerted = <String>{};
+      List<FireAlert> fire(int seq) => detectFires(
+            dishes: <ScheduledDish>[
+              _dish(
+                dishId: 'steak',
+                stationId: 'grill',
+                fireAt: 5,
+                name: 'Steak',
+                kotIds: <String>['t1'],
+                priority: PriorityKind.fireNow,
+                reFireSeq: seq,
+              ),
+            ],
+            stationsById: stations,
+            elapsedMins: 5,
+            started: true,
+            alerted: alerted,
+          );
+      expect(fire(1), hasLength(1)); // first re-fire announces
+      expect(fire(1), isEmpty); // same seq → once-only, no duplicate
+      expect(fire(2), hasLength(1)); // bumped seq, same minute → re-announces
+    });
   });
 
   group('detectFires reschedule + aggregation', () {
@@ -261,7 +310,7 @@ void main() {
           fired.firstWhere((FireAlert a) => a.dishName == 'Ribeye Steak');
       expect(steak.qty, 4);
       expect(steak.stationName, 'Grill');
-      expect(steak.spokenText, 'Fire Grill — 4 Ribeye Steak');
+      expect(steak.spokenText, 'Grill — 4 Ribeye Steak');
     });
 
     test('same-dish cooks firing on different ticks are not merged', () {
@@ -380,7 +429,7 @@ void main() {
       );
       expect(fired.single.notes, <String>['no pickles', 'extra cheese']);
       expect(fired.single.spokenText,
-          'Fire Grill — 1 Burger, note: no pickles; extra cheese');
+          'Grill — 1 Burger, note: no pickles; extra cheese');
     });
 
     test('a cook with no notes speaks plainly', () {
@@ -390,7 +439,7 @@ void main() {
         dishName: 'Burger',
         qty: 1,
       );
-      expect(a.spokenText, 'Fire Grill — 1 Burger');
+      expect(a.spokenText, 'Grill — 1 Burger');
     });
 
     test('batchSpokenText includes each item\'s note', () {
@@ -409,7 +458,7 @@ void main() {
       );
       expect(
         batchSpokenText(<FireAlert>[a, b]),
-        'Fire Grill — 1 Burger, note: no pickles, and Steam — 1 Momo',
+        'Grill — 1 Burger, note: no pickles, and Steam — 1 Momo',
       );
     });
   });
@@ -429,7 +478,7 @@ void main() {
     test('a single fire reads exactly like its own spokenText', () {
       final FireAlert a = alert('Grill', 'Burger', 2);
       expect(batchSpokenText(<FireAlert>[a]), a.spokenText);
-      expect(batchSpokenText(<FireAlert>[a]), 'Fire Grill — 2 Burger');
+      expect(batchSpokenText(<FireAlert>[a]), 'Grill — 2 Burger');
     });
 
     test('two simultaneous fires are both named with an "and"', () {
@@ -438,7 +487,7 @@ void main() {
           alert('Grill', 'Burger', 2),
           alert('Steam', 'Momo', 1),
         ]),
-        'Fire Grill — 2 Burger, and Steam — 1 Momo',
+        'Grill — 2 Burger, and Steam — 1 Momo',
       );
     });
 
@@ -449,7 +498,7 @@ void main() {
           alert('Steam', 'Momo', 1),
           alert('Fryer', 'Fries', 3),
         ]),
-        'Fire Grill — 2 Burger, Steam — 1 Momo, and Fryer — 3 Fries',
+        'Grill — 2 Burger, Steam — 1 Momo, and Fryer — 3 Fries',
       );
       expect(
         batchSpokenText(<FireAlert>[
@@ -458,7 +507,7 @@ void main() {
           alert('Fryer', 'Fries', 3),
           alert('Wok', 'Noodles', 4),
         ]),
-        'Fire Grill — 2 Burger, Steam — 1 Momo, Fryer — 3 Fries, '
+        'Grill — 2 Burger, Steam — 1 Momo, Fryer — 3 Fries, '
         'and Wok — 4 Noodles',
       );
     });

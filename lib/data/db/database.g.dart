@@ -2546,6 +2546,466 @@ class OrderLinesCompanion extends UpdateCompanion<OrderLineRow> {
   }
 }
 
+class $BoardMetaTable extends BoardMeta
+    with TableInfo<$BoardMetaTable, BoardMetaRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BoardMetaTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _deletedMeta = const VerificationMeta(
+    'deleted',
+  );
+  @override
+  late final GeneratedColumn<bool> deleted = GeneratedColumn<bool>(
+    'deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _dirtyMeta = const VerificationMeta('dirty');
+  @override
+  late final GeneratedColumn<bool> dirty = GeneratedColumn<bool>(
+    'dirty',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dirty" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _epochMsMeta = const VerificationMeta(
+    'epochMs',
+  );
+  @override
+  late final GeneratedColumn<int> epochMs = GeneratedColumn<int>(
+    'epoch_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _speedMeta = const VerificationMeta('speed');
+  @override
+  late final GeneratedColumn<int> speed = GeneratedColumn<int>(
+    'speed',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    updatedAt,
+    version,
+    deleted,
+    dirty,
+    epochMs,
+    speed,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'board_meta';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BoardMetaRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted')) {
+      context.handle(
+        _deletedMeta,
+        deleted.isAcceptableOrUnknown(data['deleted']!, _deletedMeta),
+      );
+    }
+    if (data.containsKey('dirty')) {
+      context.handle(
+        _dirtyMeta,
+        dirty.isAcceptableOrUnknown(data['dirty']!, _dirtyMeta),
+      );
+    }
+    if (data.containsKey('epoch_ms')) {
+      context.handle(
+        _epochMsMeta,
+        epochMs.isAcceptableOrUnknown(data['epoch_ms']!, _epochMsMeta),
+      );
+    }
+    if (data.containsKey('speed')) {
+      context.handle(
+        _speedMeta,
+        speed.isAcceptableOrUnknown(data['speed']!, _speedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BoardMetaRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BoardMetaRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleted'],
+      )!,
+      dirty: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dirty'],
+      )!,
+      epochMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}epoch_ms'],
+      ),
+      speed: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}speed'],
+      ),
+    );
+  }
+
+  @override
+  $BoardMetaTable createAlias(String alias) {
+    return $BoardMetaTable(attachedDatabase, alias);
+  }
+}
+
+class BoardMetaRow extends DataClass implements Insertable<BoardMetaRow> {
+  final String id;
+  final DateTime updatedAt;
+  final int version;
+  final bool deleted;
+  final bool dirty;
+
+  /// Board epoch as **milliseconds** since the Unix epoch. Stored as int (not a
+  /// `DateTimeColumn`, whose Drift default is epoch *seconds*) so re-anchoring
+  /// the monotonic clock keeps sub-second fidelity.
+  final int? epochMs;
+
+  /// The run-speed multiplier in effect, so a restart resumes at the same rate
+  /// (`elapsed = (now − epoch) × speed`) rather than the in-memory default.
+  final int? speed;
+  const BoardMetaRow({
+    required this.id,
+    required this.updatedAt,
+    required this.version,
+    required this.deleted,
+    required this.dirty,
+    this.epochMs,
+    this.speed,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    map['deleted'] = Variable<bool>(deleted);
+    map['dirty'] = Variable<bool>(dirty);
+    if (!nullToAbsent || epochMs != null) {
+      map['epoch_ms'] = Variable<int>(epochMs);
+    }
+    if (!nullToAbsent || speed != null) {
+      map['speed'] = Variable<int>(speed);
+    }
+    return map;
+  }
+
+  BoardMetaCompanion toCompanion(bool nullToAbsent) {
+    return BoardMetaCompanion(
+      id: Value(id),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deleted: Value(deleted),
+      dirty: Value(dirty),
+      epochMs: epochMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(epochMs),
+      speed: speed == null && nullToAbsent
+          ? const Value.absent()
+          : Value(speed),
+    );
+  }
+
+  factory BoardMetaRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BoardMetaRow(
+      id: serializer.fromJson<String>(json['id']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deleted: serializer.fromJson<bool>(json['deleted']),
+      dirty: serializer.fromJson<bool>(json['dirty']),
+      epochMs: serializer.fromJson<int?>(json['epochMs']),
+      speed: serializer.fromJson<int?>(json['speed']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deleted': serializer.toJson<bool>(deleted),
+      'dirty': serializer.toJson<bool>(dirty),
+      'epochMs': serializer.toJson<int?>(epochMs),
+      'speed': serializer.toJson<int?>(speed),
+    };
+  }
+
+  BoardMetaRow copyWith({
+    String? id,
+    DateTime? updatedAt,
+    int? version,
+    bool? deleted,
+    bool? dirty,
+    Value<int?> epochMs = const Value.absent(),
+    Value<int?> speed = const Value.absent(),
+  }) => BoardMetaRow(
+    id: id ?? this.id,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deleted: deleted ?? this.deleted,
+    dirty: dirty ?? this.dirty,
+    epochMs: epochMs.present ? epochMs.value : this.epochMs,
+    speed: speed.present ? speed.value : this.speed,
+  );
+  BoardMetaRow copyWithCompanion(BoardMetaCompanion data) {
+    return BoardMetaRow(
+      id: data.id.present ? data.id.value : this.id,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deleted: data.deleted.present ? data.deleted.value : this.deleted,
+      dirty: data.dirty.present ? data.dirty.value : this.dirty,
+      epochMs: data.epochMs.present ? data.epochMs.value : this.epochMs,
+      speed: data.speed.present ? data.speed.value : this.speed,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BoardMetaRow(')
+          ..write('id: $id, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deleted: $deleted, ')
+          ..write('dirty: $dirty, ')
+          ..write('epochMs: $epochMs, ')
+          ..write('speed: $speed')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, updatedAt, version, deleted, dirty, epochMs, speed);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BoardMetaRow &&
+          other.id == this.id &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deleted == this.deleted &&
+          other.dirty == this.dirty &&
+          other.epochMs == this.epochMs &&
+          other.speed == this.speed);
+}
+
+class BoardMetaCompanion extends UpdateCompanion<BoardMetaRow> {
+  final Value<String> id;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<bool> deleted;
+  final Value<bool> dirty;
+  final Value<int?> epochMs;
+  final Value<int?> speed;
+  final Value<int> rowid;
+  const BoardMetaCompanion({
+    this.id = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deleted = const Value.absent(),
+    this.dirty = const Value.absent(),
+    this.epochMs = const Value.absent(),
+    this.speed = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  BoardMetaCompanion.insert({
+    required String id,
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deleted = const Value.absent(),
+    this.dirty = const Value.absent(),
+    this.epochMs = const Value.absent(),
+    this.speed = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id);
+  static Insertable<BoardMetaRow> custom({
+    Expression<String>? id,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<bool>? deleted,
+    Expression<bool>? dirty,
+    Expression<int>? epochMs,
+    Expression<int>? speed,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deleted != null) 'deleted': deleted,
+      if (dirty != null) 'dirty': dirty,
+      if (epochMs != null) 'epoch_ms': epochMs,
+      if (speed != null) 'speed': speed,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  BoardMetaCompanion copyWith({
+    Value<String>? id,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<bool>? deleted,
+    Value<bool>? dirty,
+    Value<int?>? epochMs,
+    Value<int?>? speed,
+    Value<int>? rowid,
+  }) {
+    return BoardMetaCompanion(
+      id: id ?? this.id,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deleted: deleted ?? this.deleted,
+      dirty: dirty ?? this.dirty,
+      epochMs: epochMs ?? this.epochMs,
+      speed: speed ?? this.speed,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deleted.present) {
+      map['deleted'] = Variable<bool>(deleted.value);
+    }
+    if (dirty.present) {
+      map['dirty'] = Variable<bool>(dirty.value);
+    }
+    if (epochMs.present) {
+      map['epoch_ms'] = Variable<int>(epochMs.value);
+    }
+    if (speed.present) {
+      map['speed'] = Variable<int>(speed.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BoardMetaCompanion(')
+          ..write('id: $id, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deleted: $deleted, ')
+          ..write('dirty: $dirty, ')
+          ..write('epochMs: $epochMs, ')
+          ..write('speed: $speed, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -2553,6 +3013,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MenuItemsTable menuItems = $MenuItemsTable(this);
   late final $KotsTable kots = $KotsTable(this);
   late final $OrderLinesTable orderLines = $OrderLinesTable(this);
+  late final $BoardMetaTable boardMeta = $BoardMetaTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2562,6 +3023,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     menuItems,
     kots,
     orderLines,
+    boardMeta,
   ];
 }
 
@@ -3795,6 +4257,244 @@ typedef $$OrderLinesTableProcessedTableManager =
       OrderLineRow,
       PrefetchHooks Function()
     >;
+typedef $$BoardMetaTableCreateCompanionBuilder =
+    BoardMetaCompanion Function({
+      required String id,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<bool> deleted,
+      Value<bool> dirty,
+      Value<int?> epochMs,
+      Value<int?> speed,
+      Value<int> rowid,
+    });
+typedef $$BoardMetaTableUpdateCompanionBuilder =
+    BoardMetaCompanion Function({
+      Value<String> id,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<bool> deleted,
+      Value<bool> dirty,
+      Value<int?> epochMs,
+      Value<int?> speed,
+      Value<int> rowid,
+    });
+
+class $$BoardMetaTableFilterComposer
+    extends Composer<_$AppDatabase, $BoardMetaTable> {
+  $$BoardMetaTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get dirty => $composableBuilder(
+    column: $table.dirty,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get epochMs => $composableBuilder(
+    column: $table.epochMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get speed => $composableBuilder(
+    column: $table.speed,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BoardMetaTableOrderingComposer
+    extends Composer<_$AppDatabase, $BoardMetaTable> {
+  $$BoardMetaTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deleted => $composableBuilder(
+    column: $table.deleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get dirty => $composableBuilder(
+    column: $table.dirty,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get epochMs => $composableBuilder(
+    column: $table.epochMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get speed => $composableBuilder(
+    column: $table.speed,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BoardMetaTableAnnotationComposer
+    extends Composer<_$AppDatabase, $BoardMetaTable> {
+  $$BoardMetaTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<bool> get deleted =>
+      $composableBuilder(column: $table.deleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get dirty =>
+      $composableBuilder(column: $table.dirty, builder: (column) => column);
+
+  GeneratedColumn<int> get epochMs =>
+      $composableBuilder(column: $table.epochMs, builder: (column) => column);
+
+  GeneratedColumn<int> get speed =>
+      $composableBuilder(column: $table.speed, builder: (column) => column);
+}
+
+class $$BoardMetaTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $BoardMetaTable,
+          BoardMetaRow,
+          $$BoardMetaTableFilterComposer,
+          $$BoardMetaTableOrderingComposer,
+          $$BoardMetaTableAnnotationComposer,
+          $$BoardMetaTableCreateCompanionBuilder,
+          $$BoardMetaTableUpdateCompanionBuilder,
+          (
+            BoardMetaRow,
+            BaseReferences<_$AppDatabase, $BoardMetaTable, BoardMetaRow>,
+          ),
+          BoardMetaRow,
+          PrefetchHooks Function()
+        > {
+  $$BoardMetaTableTableManager(_$AppDatabase db, $BoardMetaTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BoardMetaTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BoardMetaTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BoardMetaTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
+                Value<bool> dirty = const Value.absent(),
+                Value<int?> epochMs = const Value.absent(),
+                Value<int?> speed = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BoardMetaCompanion(
+                id: id,
+                updatedAt: updatedAt,
+                version: version,
+                deleted: deleted,
+                dirty: dirty,
+                epochMs: epochMs,
+                speed: speed,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<bool> deleted = const Value.absent(),
+                Value<bool> dirty = const Value.absent(),
+                Value<int?> epochMs = const Value.absent(),
+                Value<int?> speed = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => BoardMetaCompanion.insert(
+                id: id,
+                updatedAt: updatedAt,
+                version: version,
+                deleted: deleted,
+                dirty: dirty,
+                epochMs: epochMs,
+                speed: speed,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BoardMetaTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $BoardMetaTable,
+      BoardMetaRow,
+      $$BoardMetaTableFilterComposer,
+      $$BoardMetaTableOrderingComposer,
+      $$BoardMetaTableAnnotationComposer,
+      $$BoardMetaTableCreateCompanionBuilder,
+      $$BoardMetaTableUpdateCompanionBuilder,
+      (
+        BoardMetaRow,
+        BaseReferences<_$AppDatabase, $BoardMetaTable, BoardMetaRow>,
+      ),
+      BoardMetaRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -3806,4 +4506,6 @@ class $AppDatabaseManager {
   $$KotsTableTableManager get kots => $$KotsTableTableManager(_db, _db.kots);
   $$OrderLinesTableTableManager get orderLines =>
       $$OrderLinesTableTableManager(_db, _db.orderLines);
+  $$BoardMetaTableTableManager get boardMeta =>
+      $$BoardMetaTableTableManager(_db, _db.boardMeta);
 }

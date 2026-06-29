@@ -93,6 +93,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Settings starts collapsed now — open it so the fire-toast presets build.
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+    // Auto-serve defaults ON, which reveals its delay chips (1 min/2 min/…) —
+    // those share labels with the fire-toast presets this test taps. Hide them
+    // so `find.text('1 min')` stays unambiguous (this test is about fire toast).
+    settings.setAutoServeEnabled(false);
+    await tester.pumpAndSettle();
     return (settings: settings, fire: fire);
   }
 

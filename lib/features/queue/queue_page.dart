@@ -6,6 +6,7 @@ import 'package:kbuzz/features/board/board_data.dart';
 import 'package:kbuzz/features/board/board_widgets.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
+import 'package:kbuzz/features/service/cubit/fired_cooks_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 
 /// Queue — the flat "fire next" feed across all tickets, in real scheduler fire
@@ -49,6 +50,11 @@ class QueuePage extends StatelessWidget {
                   .watch<SettingsCubit>()
                   .state
                   .fireImmediately,
+              // Optional: present app-wide (DI), absent in lean widget tests →
+              // empty pins (no pinning, identical schedule).
+              pinnedFireMins:
+                  context.watch<FiredCooksCubit?>()?.state.pinnedFireMins ??
+                      const <String, int>{},
             );
             final Bottleneck? bottleneck = board.schedule.bottleneck;
             // Re-filter every tick so served cooks fall off the queue live.
@@ -56,13 +62,25 @@ class QueuePage extends StatelessWidget {
               builder: (BuildContext context, ServiceClockState clock) {
                 final List<ScheduledDish> fireOrder = board.fireOrder
                     .where(
-                      (ScheduledDish d) => !dishServed(
-                        d,
-                        board.statusForKot,
-                        clock.elapsedMins,
-                        started: clock.started,
-                        retainMins: config.retainMins,
-                      ),
+                      (ScheduledDish d) {
+                        // Served + retained cooks have left the board entirely.
+                        if (dishServed(
+                          d,
+                          board.statusForKot,
+                          clock.elapsedMins,
+                          started: clock.started,
+                          retainMins: config.retainMins,
+                        )) {
+                          return false;
+                        }
+                        // "Fire next" is the upcoming/in-progress feed — once a
+                        // cook has finished cooking it's no longer something to
+                        // fire, so it drops off (it's now the expo's to serve).
+                        if (clock.started && clock.elapsedMins >= d.finishAt) {
+                          return false;
+                        }
+                        return true;
+                      },
                     )
                     .toList(growable: false);
                 return ListView(
@@ -107,14 +125,16 @@ class _FireRow extends StatelessWidget {
     final KdsColors c = KdsColors.of(context);
     final station = board.stationOf(dish.stationId);
     final Color? color = station == null ? null : Color(station.color);
-    return Container(
+    // Ticket-colour stripe so a cook reads as its order — same colour the
+    // Stations rail paints this ticket's bar (first table for a batched cook).
+    final Color tColor = dish.members.isEmpty
+        ? (color ?? c.textFaint)
+        : ticketColor(dish.members.first.kotId);
+    return TicketStripeCard(
+      ticketColor: tColor,
       padding: const EdgeInsets.symmetric(
         horizontal: kSpaceMd,
         vertical: kSpaceMd,
-      ),
-      decoration: BoxDecoration(
-        color: c.surface,
-        borderRadius: BorderRadius.circular(kRadiusLg),
       ),
       child: Row(
         children: <Widget>[

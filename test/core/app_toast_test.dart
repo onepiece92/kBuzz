@@ -180,7 +180,7 @@ void main() {
     });
 
     testWidgets(
-        'a newer fire swaps content in place without restarting the timer',
+        'each fire stacks as its own toast, each with its own expire timer',
         (WidgetTester tester) async {
       final BuildContext ctx = await pumpHost(tester);
       AppToast.fire(
@@ -194,7 +194,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 300)); // slide-in
       expect(find.text('Burger'), findsOneWidget);
 
-      // 6s in, a second fire arrives: content swaps to the new dish in place.
+      // 6s in, a second fire arrives — it STACKS as its own toast (not a
+      // content-swap of the first), so both are on screen at once.
       await tester.pump(const Duration(seconds: 6));
       AppToast.fire(
         ctx,
@@ -204,13 +205,19 @@ void main() {
         duration: const Duration(seconds: 10),
       );
       await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Burger'), findsOneWidget);
       expect(find.text('Fries'), findsOneWidget);
-      expect(find.text('Burger'), findsNothing);
+      expect(find.text('FIRE NOW'), findsNWidgets(2));
 
-      // The original ~10s countdown is NOT restarted by the second fire, so by
-      // ~11s from first appearance the toast is gone (a re-arm would keep it to
-      // ~16s — that's the bug this guards against).
-      await tester.pump(const Duration(seconds: 5));
+      // Each runs its OWN 10s timer: the first (older) expires while the second
+      // — added 6s later — is still up.
+      await tester.pump(const Duration(seconds: 5)); // ~11s first / ~5s second
+      await tester.pumpAndSettle();
+      expect(find.text('Burger'), findsNothing); // first gone on its own timer
+      expect(find.text('Fries'), findsOneWidget); // second still counting down
+
+      await tester.pump(const Duration(seconds: 6)); // drain the second
       await tester.pumpAndSettle();
       expect(find.text('Fries'), findsNothing);
     });
@@ -259,6 +266,76 @@ void main() {
       await tester.pump();
       expect(find.byIcon(Icons.close), findsNothing);
       expect(find.textContaining('FIRE NOW'), findsNothing);
+    });
+  });
+
+  group('AppToast stacking', () {
+    testWidgets('a second toast stacks below the first, not replacing it',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.success(ctx, 'First', duration: const Duration(seconds: 5));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('First'), findsOneWidget);
+
+      AppToast.error(ctx, 'Second', duration: const Duration(seconds: 5));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // Both visible at once — the old one wasn't dismissed.
+      expect(find.text('First'), findsOneWidget);
+      expect(find.text('Second'), findsOneWidget);
+      // The newer toast sits BELOW the older one.
+      expect(
+        tester.getTopLeft(find.text('Second')).dy,
+        greaterThan(tester.getTopLeft(find.text('First')).dy),
+      );
+
+      AppToast.dismiss();
+      await tester.pumpAndSettle();
+      expect(find.text('First'), findsNothing);
+      expect(find.text('Second'), findsNothing);
+    });
+
+    testWidgets('a fire alert and a normal toast can show at the same time',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      AppToast.fire(
+        ctx,
+        items: const <FireToastItem>[
+          FireToastItem(dishName: 'Burger', stationName: 'Grill'),
+        ],
+        duration: const Duration(seconds: 5),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      AppToast.success(ctx, 'Saved', duration: const Duration(seconds: 5));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('FIRE NOW'), findsOneWidget);
+      expect(find.text('Saved'), findsOneWidget);
+
+      AppToast.dismiss();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('the stack is capped — the oldest normal toast drops',
+        (WidgetTester tester) async {
+      final BuildContext ctx = await pumpHost(tester);
+      for (int i = 0; i < 6; i++) {
+        AppToast.show(ctx, 'T$i', duration: const Duration(seconds: 10));
+      }
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      // _maxVisible = 4: the two oldest were dropped, the newest survive.
+      expect(find.text('T0'), findsNothing);
+      expect(find.text('T1'), findsNothing);
+      expect(find.text('T5'), findsOneWidget);
+
+      AppToast.dismiss();
+      await tester.pumpAndSettle();
     });
   });
 }

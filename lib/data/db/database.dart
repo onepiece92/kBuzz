@@ -12,7 +12,7 @@ part 'database.g.dart';
 ///
 /// DAO-style watch/query methods live here for the four tables. Reads filter
 /// `deleted = false` (tombstone pattern). Use [AppDatabase.memory] in tests.
-@DriftDatabase(tables: <Type>[Stations, MenuItems, Kots, OrderLines])
+@DriftDatabase(tables: <Type>[Stations, MenuItems, Kots, OrderLines, BoardMeta])
 class AppDatabase extends _$AppDatabase {
   /// Opens the on-disk database (default for the running app).
   AppDatabase() : super(_openOnDisk());
@@ -21,7 +21,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -39,6 +39,11 @@ class AppDatabase extends _$AppDatabase {
           // v2 → v3: per-line special instruction (note).
           if (from < 3) {
             await m.addColumn(orderLines, orderLines.note);
+          }
+          // v3 → v4: durable board epoch + run speed (additive — only creates the
+          // new table; existing tickets/orderedAt are untouched).
+          if (from < 4) {
+            await m.createTable(boardMeta);
           }
         },
       );
@@ -71,6 +76,57 @@ class AppDatabase extends _$AppDatabase {
   Future<List<OrderLineRow>> allOrderLines() =>
       (select(orderLines)..where((OrderLines t) => t.deleted.equals(false)))
           .get();
+
+  // --- Board session meta (the durable board epoch + run speed) --------------
+  // A single row keyed by the fixed id 'board'. Read/written through these
+  // helpers so the epoch survives a restart (the schedule's `now` + the run
+  // clock re-anchor to it instead of re-stamping wall-now).
+  static const String _boardMetaId = 'board';
+
+  Future<BoardMetaRow?> _boardMetaRow() =>
+      (select(boardMeta)
+            ..where((BoardMeta t) =>
+                t.id.equals(_boardMetaId) & t.deleted.equals(false)))
+          .getSingleOrNull();
+
+  /// The persisted board epoch (null if never set / cleared).
+  Future<DateTime?> loadEpoch() async {
+    final int? ms = (await _boardMetaRow())?.epochMs;
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
+  }
+
+  /// The persisted run-speed multiplier (null if never set).
+  Future<int?> loadSpeed() async => (await _boardMetaRow())?.speed;
+
+  /// Reactive board-meta row (null until first written / after clear).
+  Stream<BoardMetaRow?> watchBoardMeta() => (select(boardMeta)
+        ..where((BoardMeta t) =>
+            t.id.equals(_boardMetaId) & t.deleted.equals(false)))
+      .watchSingleOrNull();
+
+  /// Upsert the board epoch, leaving any persisted speed untouched (partial
+  /// companion ⇒ only `epochMs`/`deleted` are written on conflict).
+  Future<void> saveEpoch(DateTime? epoch) =>
+      into(boardMeta).insertOnConflictUpdate(
+        BoardMetaCompanion.insert(
+          id: _boardMetaId,
+          epochMs: Value<int?>(epoch?.millisecondsSinceEpoch),
+          deleted: const Value<bool>(false),
+        ),
+      );
+
+  /// Upsert the run speed, leaving any persisted epoch untouched.
+  Future<void> saveSpeed(int speed) => into(boardMeta).insertOnConflictUpdate(
+        BoardMetaCompanion.insert(
+          id: _boardMetaId,
+          speed: Value<int>(speed),
+          deleted: const Value<bool>(false),
+        ),
+      );
+
+  /// Drop the board-meta row entirely (used by clear/replace so no stale epoch
+  /// lingers).
+  Future<void> deleteBoardMeta() => delete(boardMeta).go();
 }
 
 LazyDatabase _openOnDisk() {

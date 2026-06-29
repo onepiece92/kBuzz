@@ -11,7 +11,10 @@ import 'package:kbuzz/data/repositories/kitchen_repository.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/service/cubit/fire_alert_cubit.dart';
+import 'package:kbuzz/features/service/cubit/fired_cooks_cubit.dart';
 import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
+import 'package:kbuzz/features/service/widgets/auto_drip_listener.dart';
+import 'package:kbuzz/features/service/widgets/auto_serve_listener.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Root dependency-injection wiring.
@@ -102,8 +105,15 @@ class AppProviders extends StatelessWidget {
             ),
           ),
           // App-wide run clock shared by all three boards (drives live status).
+          // Wall-clock backed via the injected [Clock]; in-session elapsed runs
+          // off a monotonic clock (immune to device clock changes). The run speed
+          // is persisted (BoardMeta) so a restart resumes at the same rate.
           BlocProvider<ServiceClockCubit>(
-            create: (BuildContext context) => ServiceClockCubit(),
+            create: (BuildContext context) => ServiceClockCubit(
+              clock: context.read<Clock>(),
+              persistSpeed: (int s) =>
+                  context.read<KitchenRepository>().saveSpeed(s),
+            ),
           ),
           // App-wide user preferences (fire-toast hold time, cook-timing policy,
           // …), persisted via the injected SharedPreferences (session-only when
@@ -121,8 +131,23 @@ class AppProviders extends StatelessWidget {
               settings: context.read<SettingsCubit>(),
             ),
           ),
+          // Captures each cook's fire minute as the clock crosses it, so the
+          // boards can pin already-fired cooks in place — adding a ticket then
+          // can't re-time a dish that's already on the pass. In-memory; cleared
+          // on reset. The boards read its pin map into BoardData.from.
+          BlocProvider<FiredCooksCubit>(
+            create: (BuildContext context) => FiredCooksCubit(
+              clock: context.read<ServiceClockCubit>(),
+              data: context.read<DemoDataCubit>(),
+              settings: context.read<SettingsCubit>(),
+            ),
+          ),
         ],
-        child: child,
+        // Drives the optional auto-ticket drip + auto serve-all (Profile) off the
+        // run clock, app-wide so they run on every tab. Inert until switched on.
+        child: AutoDripListener(
+          child: AutoServeListener(child: child),
+        ),
       ),
     );
   }

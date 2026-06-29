@@ -175,21 +175,19 @@ void main() {
       expect(s.elapsedMins, 1.5);
     });
 
-    test('started is true while running or after any elapsed', () {
+    test('started is true once an epoch is anchored', () {
+      // started now tracks the wall-clock anchor, not accumulated elapsed: a run
+      // has begun iff it has an epoch (set by start(), cleared by reset()).
       expect(const ServiceClockState().started, isFalse);
-      expect(const ServiceClockState(running: true).started, isTrue);
-      expect(
-        const ServiceClockState(elapsed: Duration(seconds: 1)).started,
-        isTrue,
-      );
+      expect(ServiceClockState(epoch: DateTime(2026, 1, 1, 18)).started, isTrue);
     });
   });
 
   group('ServiceClockCubit', () {
-    test('starts at zero, default speed 8, not running', () {
+    test('starts at zero, default speed 1 (real time), not running', () {
       final ServiceClockCubit cubit = ServiceClockCubit();
       expect(cubit.state.elapsed, Duration.zero);
-      expect(cubit.state.speed, 8);
+      expect(cubit.state.speed, 1);
       expect(cubit.state.running, isFalse);
       cubit.close();
     });

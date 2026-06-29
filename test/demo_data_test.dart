@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kbuzz/core/clock.dart';
 import 'package:kbuzz/data/demo/demo_data.dart';
@@ -46,6 +48,47 @@ void main() {
     });
   });
 
+  group('buildRandomDemoData', () {
+    test('keeps the full menu/config but orders from a station subset', () {
+      final DemoData data = buildRandomDemoData(now: now, random: Random(1));
+      // "Leave the menu": the full menu + station config still ship.
+      expect(data.menu, hasLength(14));
+      expect(data.stations, hasLength(9));
+
+      final Set<String> menuIds = data.menu.map((Dish d) => d.id).toSet();
+      final Set<String> orderedStations = <String>{};
+      for (final Kot k in data.kots) {
+        for (final OrderLine l in k.lines) {
+          expect(menuIds, contains(l.dishId)); // only real dishes
+          orderedStations.add(
+            data.menu.firstWhere((Dish d) => d.id == l.dishId).stationId,
+          );
+        }
+      }
+      // Only a handful of stations are actually used → a cleaner board.
+      expect(orderedStations, isNotEmpty);
+      expect(orderedStations.length, lessThanOrEqualTo(5));
+    });
+  });
+
+  group('buildRandomKot', () {
+    final List<Dish> menu = buildDemoData(now: now).menu;
+
+    test('builds one ticket from the menu, ordered at now', () {
+      final Kot kot =
+          buildRandomKot(now: now, menu: menu, id: 'live-1', random: Random(42));
+      expect(kot.id, 'live-1');
+      expect(kot.orderedAt, now);
+      expect(kot.lines, isNotEmpty);
+      expect(kot.lines.length, lessThanOrEqualTo(4));
+      final Set<String> ids = menu.map((Dish d) => d.id).toSet();
+      for (final OrderLine line in kot.lines) {
+        expect(ids, contains(line.dishId)); // only existing dishes
+        expect(line.qty, anyOf(1, 2));
+      }
+    });
+  });
+
   group('BoardData (scheduler-backed)', () {
     final BoardData board = BoardData.from(buildDemoData(now: now), now: now);
 
@@ -85,9 +128,9 @@ void main() {
 
       cubit.generate();
       expect(cubit.state.hasData, isTrue);
-      // No AI key in tests → the randomized fallback, which is longer than the
-      // old static 4-ticket sample.
-      expect(cubit.state.data!.kots.length, greaterThanOrEqualTo(6));
+      // No AI key in tests → the randomized fallback (a trimmed 3–6 ticket rush).
+      expect(cubit.state.data!.kots.length, greaterThanOrEqualTo(3));
+      expect(cubit.state.data!.kots.length, lessThanOrEqualTo(6));
       expect(cubit.state.data!.stations, hasLength(9)); // fixed config kept
       expect(cubit.state.generatedAt, now);
 
@@ -145,6 +188,92 @@ void main() {
 
       cubit.setStationCapacity('steam', 0); // floored at 1
       expect(capOf('steam'), 1);
+      cubit.close();
+    });
+
+    test('addRandomKot is a no-op (null) without a board', () {
+      final DemoDataCubit cubit = DemoDataCubit(clock: _FixedClock(now));
+      expect(cubit.addRandomKot(), isNull);
+      expect(cubit.state.hasData, isFalse);
+      cubit.close();
+    });
+
+    test('addRandomKot drops one ticket at the live run time, epoch fixed', () {
+      final DemoDataCubit cubit =
+          DemoDataCubit(clock: _FixedClock(now), random: Random(7));
+      cubit.generate();
+      final int before = cubit.state.data!.kots.length;
+      final DateTime epoch = cubit.state.generatedAt!;
+
+      final Kot? added = cubit.addRandomKot(elapsed: const Duration(minutes: 12));
+      expect(added, isNotNull);
+      expect(cubit.state.data!.kots.length, before + 1);
+      // Board epoch unchanged — a new order must not shift the schedule's `now`.
+      expect(cubit.state.generatedAt, epoch);
+      // Ordered at the current service moment (epoch + elapsed) so it lands now.
+      expect(
+        cubit.state.data!.kots.last.orderedAt,
+        epoch.add(const Duration(minutes: 12)),
+      );
+      // Draws from the existing menu — no new dishes appended.
+      final Set<String> ids =
+          cubit.state.data!.menu.map((Dish d) => d.id).toSet();
+      for (final OrderLine line in added!.lines) {
+        expect(ids, contains(line.dishId));
+      }
+      cubit.close();
+    });
+
+    test('addRandomKot orders only from already-open stations (clean env)', () {
+      final DemoDataCubit cubit =
+          DemoDataCubit(clock: _FixedClock(now), random: Random(11));
+      cubit.generate();
+      final DemoData board = cubit.state.data!;
+      final Map<String, String> stationOf = <String, String>{
+        for (final Dish d in board.menu) d.id: d.stationId,
+      };
+      Set<String> openStationsOf(DemoData d) => <String>{
+            for (final Kot k in d.kots)
+              for (final OrderLine l in k.lines)
+                if (stationOf[l.dishId] != null) stationOf[l.dishId]!,
+          };
+      final Set<String> opened = openStationsOf(board);
+      expect(opened, isNotEmpty);
+
+      // Drip several tickets — none may reference a station outside the set
+      // already on the board.
+      for (int i = 0; i < 8; i++) {
+        final Kot? added = cubit.addRandomKot(elapsed: Duration(minutes: i));
+        expect(added, isNotNull);
+        for (final OrderLine l in added!.lines) {
+          expect(opened, contains(stationOf[l.dishId]));
+        }
+      }
+      // No new station was opened by the drip.
+      expect(openStationsOf(cubit.state.data!), opened);
+      cubit.close();
+    });
+
+    test('fireNowLine / recookLine bump reFireSeq so a repeat re-fires', () {
+      final DemoDataCubit cubit =
+          DemoDataCubit(clock: _FixedClock(now), random: Random(5));
+      cubit.generate();
+      final String lineId = cubit.state.data!.kots
+          .expand((Kot k) => k.lines)
+          .firstWhere(
+            (OrderLine l) => l.id != null && l.state == LineState.open,
+          )
+          .id!;
+      OrderLine lineNow() => cubit.state.data!.kots
+          .expand((Kot k) => k.lines)
+          .firstWhere((OrderLine l) => l.id == lineId);
+
+      final int before = lineNow().reFireSeq;
+      cubit.fireNowLine(lineId, reAtMins: 3);
+      expect(lineNow().reFireSeq, before + 1);
+      // A second re-fire (even at the same minute) bumps again → distinct cook.
+      cubit.recookLine(lineId, reason: 'Cold', reAtMins: 3);
+      expect(lineNow().reFireSeq, before + 2);
       cubit.close();
     });
 

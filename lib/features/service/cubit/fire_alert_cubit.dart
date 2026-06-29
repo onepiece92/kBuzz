@@ -38,28 +38,35 @@ class FireAlert extends Equatable {
     return notes.isEmpty ? base : '$base, note: ${notes.join('; ')}';
   }
 
-  /// What the [Announcer] speaks, e.g. "Fire Grill — 2 Cheeseburger, note: no
-  /// salt".
-  String get spokenText => 'Fire $spokenDish';
+  /// What the [Announcer] speaks, e.g. "Grill — 2 Cheeseburger, note: no salt".
+  /// The attention chime already signals a fire, so the word "Fire" is not
+  /// spoken (it grates when repeated every tick) — just the dish itself.
+  String get spokenText => spokenDish;
 
   @override
-  List<Object?> get props =>
-      <Object?>[stationId, stationName, dishName, qty, emoji, notes];
+  List<Object?> get props => <Object?>[
+    stationId,
+    stationName,
+    dishName,
+    qty,
+    emoji,
+    notes,
+  ];
 }
 
 /// One spoken line covering a whole batch of fires that crossed on the same
-/// tick, so a listening chef never loses a simultaneous multi-station fire (the
-/// announcer speaks once per tick and `_tts.stop()` cuts the prior utterance —
-/// see [Announcer.announce]). [alerts] arrive in fire-priority order; **every**
-/// item is named, joined by commas with a final "and". A single fire reads
-/// exactly like its own [FireAlert.spokenText].
+/// tick, so a listening chef never loses a simultaneous multi-station fire. The
+/// announcer **queues** utterances (one per tick, each finishes before the next
+/// — see [Announcer.announce]); collapsing a same-tick batch into a single line
+/// keeps it one coherent utterance instead of N chimed lines. [alerts] arrive in
+/// fire-priority order; **every** item is named, joined by commas with a final
+/// "and". A single fire reads exactly like its own [FireAlert.spokenText].
 String batchSpokenText(List<FireAlert> alerts) {
   if (alerts.isEmpty) return '';
   if (alerts.length == 1) return alerts.single.spokenText;
-  final List<String> parts =
-      alerts.map((FireAlert a) => a.spokenDish).toList();
+  final List<String> parts = alerts.map((FireAlert a) => a.spokenDish).toList();
   final String last = parts.removeLast();
-  return 'Fire ${parts.join(', ')}, and $last';
+  return '${parts.join(', ')}, and $last';
 }
 
 /// State carrying the alerts produced on the latest processed tick. [tick] is a
@@ -82,17 +89,17 @@ class FireAlertState extends Equatable {
 /// + dish + the **tickets it serves** (`members`) — invariant under re-packing.
 ///
 /// A deliberate re-fire — recook / fire-now ([PriorityKind.recook] /
-/// [PriorityKind.fireNow]) — appends its `fireAt`, so each new re-fire of the
-/// same line is a distinct key and re-announces.
-String fireKey(ScheduledDish d) {
-  final List<String> kotIds = <String>[
-    for (final ScheduledMember m in d.members) m.kotId,
-  ]..sort();
-  final String base = '${d.stationId}|${d.dishId}|${kotIds.join(',')}';
-  final bool isRefire = d.priority == PriorityKind.recook ||
-      d.priority == PriorityKind.fireNow;
-  return isRefire ? '$base|refire:${d.fireAt}' : base;
-}
+/// [PriorityKind.fireNow]) — appends its monotonic [ScheduledDish.reFireSeq], so
+/// each new re-fire of the same line is a distinct key and re-announces — even a
+/// double-tap or two re-fires that land in the **same** board minute (where
+/// `fireAt` alone would collide).
+String fireKey(ScheduledDish d) => cookKey(
+      stationId: d.stationId,
+      dishId: d.dishId,
+      kotIds: <String>[for (final ScheduledMember m in d.members) m.kotId],
+      priority: d.priority,
+      reFireSeq: d.reFireSeq,
+    );
 
 /// The cooks worth firing: a cook stays in the fire stream while at least one
 /// ticket it serves is still active. A cook whose every ticket is
@@ -103,17 +110,16 @@ String fireKey(ScheduledDish d) {
 List<ScheduledDish> firableDishes(
   List<ScheduledDish> dishes,
   Map<String, Kot> kotsById,
-) =>
-    dishes
-        .where(
-          (ScheduledDish d) =>
-              d.members.isEmpty ||
-              d.members.any(
-                (ScheduledMember m) =>
-                    kotsById[m.kotId]?.status != TicketState.done,
-              ),
-        )
-        .toList(growable: false);
+) => dishes
+    .where(
+      (ScheduledDish d) =>
+          d.members.isEmpty ||
+          d.members.any(
+            (ScheduledMember m) =>
+                kotsById[m.kotId]?.status != TicketState.done,
+          ),
+    )
+    .toList(growable: false);
 
 /// Pure detector (AGENTS.md §10.5): the cooks whose `fireAt` the clock has
 /// reached and that haven't been announced yet. **Edge-triggered, once-only** —
@@ -163,14 +169,19 @@ List<FireAlert> detectFires({
 /// Watches the live clock + current schedule and emits [FireAlert]s as cooks
 /// cross their `fireAt`. The detection is derived here (the service layer), not
 /// in the pure scheduler (§0.3/§10). The app shell listens and presents.
+///
+/// Only fires while the run is **running** (a paused run takes no orders), and on
+/// each Start/Resume it **primes the backlog** ([_primeBacklog]) so resuming or
+/// restarting a mid-service run announces only cooks that cross `fireAt` from now
+/// on — never a one-shot replay of the whole already-elapsed history.
 class FireAlertCubit extends Cubit<FireAlertState> {
   FireAlertCubit({
     required DemoDataCubit data,
     required ServiceClockCubit clock,
     required SettingsCubit settings,
-  })  : _data = data,
-        _settings = settings,
-        super(const FireAlertState()) {
+  }) : _data = data,
+       _settings = settings,
+       super(const FireAlertState()) {
     _applyData(data.state);
     _dataSub = data.stream.listen(_applyData);
     _clockSub = clock.stream.listen(_onClock);
@@ -185,6 +196,10 @@ class FireAlertCubit extends Cubit<FireAlertState> {
   List<ScheduledDish> _dishes = const <ScheduledDish>[];
   Map<String, Station> _stationsById = const <String, Station>{};
   final Set<String> _alerted = <String>{};
+
+  /// Previous clock state, so we can detect the Start/Resume edge (running
+  /// false→true) and prime the backlog there.
+  ServiceClockState? _prevClock;
 
   StreamSubscription<DemoDataState>? _dataSub;
   StreamSubscription<ServiceClockState>? _clockSub;
@@ -211,6 +226,26 @@ class FireAlertCubit extends Cubit<FireAlertState> {
 
   void _onClock(ServiceClockState clock) {
     if (isClosed) return;
+    final ServiceClockState? prev = _prevClock;
+    _prevClock = clock;
+
+    // Run not started → re-arm everything so a reset/restart fires from scratch.
+    if (!clock.started) {
+      _alerted.clear();
+      return;
+    }
+    // Paused → take no orders. Wall time keeps flowing while paused and an
+    // app-resume sync() jumps `elapsed`; without this gate that jump would buzz
+    // the kitchen for a backlog of fires on an explicitly paused run.
+    if (!clock.running) return;
+
+    // Start/Resume edge (running false→true): prime the backlog so we announce
+    // only cooks that cross `fireAt` from now on — never the whole already-
+    // elapsed history (a cold-start auto-resume at a past epoch, a Start with a
+    // stale board epoch, or resuming after a long pause). Cooks due in the
+    // current run-minute stay armed, so a genuine "fire now" batch still sounds.
+    if (!(prev?.running ?? false)) _primeBacklog(clock.elapsedMins);
+
     final List<FireAlert> fired = detectFires(
       dishes: _dishes,
       stationsById: _stationsById,
@@ -220,6 +255,17 @@ class FireAlertCubit extends Cubit<FireAlertState> {
     );
     if (fired.isNotEmpty) {
       emit(FireAlertState(latest: fired, tick: state.tick + 1));
+    }
+  }
+
+  /// Suppress the historical backlog at a Start/Resume: mark every cook whose
+  /// `fireAt` is before the current run-minute as already-announced, so resuming
+  /// or restarting a mid-service run never replays every past fire at once. Cooks
+  /// at/after the current minute stay armed so they still fire going forward.
+  void _primeBacklog(double elapsedMins) {
+    final int currentMinute = elapsedMins.floor();
+    for (final ScheduledDish d in _dishes) {
+      if (d.fireAt < currentMinute) _alerted.add(fireKey(d));
     }
   }
 

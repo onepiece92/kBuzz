@@ -10,6 +10,10 @@ import 'package:kbuzz/core/logger.dart';
 abstract class Announcer {
   Future<void> announce(String text);
   Future<void> chime();
+
+  /// Drop any queued lines and cut the current utterance — used when audio is
+  /// muted mid-burst so already-queued fires stop speaking immediately.
+  Future<void> stop();
 }
 
 /// Does nothing — the default in tests/CI and when audio is muted.
@@ -21,6 +25,9 @@ class NoopAnnouncer implements Announcer {
 
   @override
   Future<void> chime() async {}
+
+  @override
+  Future<void> stop() async {}
 }
 
 /// The on-device text-to-speech surface [SystemAnnouncer] drives. Wrapped behind
@@ -33,6 +40,9 @@ abstract class TtsEngine {
 
   /// Speak [text]. With [awaitCompletion] set, the future resolves when done.
   Future<void> speak(String text);
+
+  /// Interrupt the current utterance (best-effort).
+  Future<void> stop();
 }
 
 /// Real announcer: a short attention [chime] (the platform alert sound — no
@@ -47,8 +57,11 @@ abstract class TtsEngine {
 /// All calls are best-effort: audio failures are logged and swallowed so a
 /// missing TTS engine never breaks the run.
 class SystemAnnouncer implements Announcer {
-  SystemAnnouncer({TtsEngine? engine, this.maxQueued = 4})
-      : _engine = engine ?? _FlutterTtsEngine() {
+  SystemAnnouncer({
+    TtsEngine? engine,
+    this.maxQueued = 4,
+    this.speakTimeout = const Duration(seconds: 15),
+  }) : _engine = engine ?? _FlutterTtsEngine() {
     // speak() should resolve on completion so the queue can pace itself.
     _engine.awaitCompletion(true);
   }
@@ -57,6 +70,12 @@ class SystemAnnouncer implements Announcer {
 
   /// Max *pending* (not-yet-started) utterances; the oldest is dropped past this.
   final int maxQueued;
+
+  /// Upper bound on how long to wait for one utterance to finish. The platform
+  /// completion handler can fail to fire (audio-focus loss / interruption /
+  /// backgrounding); without this the drain loop — and so all future audio —
+  /// would wedge forever with `_draining` stuck true.
+  final Duration speakTimeout;
 
   static const Logger _log = Logger('announcer');
 
@@ -88,13 +107,26 @@ class SystemAnnouncer implements Announcer {
         final String next = _pending.removeAt(0);
         await chime();
         try {
-          await _engine.speak(next); // resolves when the utterance finishes
+          // Bounded so a never-resolving completion handler can't wedge the
+          // loop (and silence all later fires) — the catch logs + moves on.
+          await _engine.speak(next).timeout(speakTimeout);
         } on Object catch (e, st) {
           _log.error('announce failed', error: e, stackTrace: st);
         }
       }
     } finally {
       _draining = false;
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    _pending.clear(); // drop everything queued
+    try {
+      await _engine
+          .stop(); // cut the current utterance; unblocks the drain loop
+    } on Object catch (e) {
+      _log.warning('stop failed: $e');
     }
   }
 }
@@ -113,5 +145,10 @@ class _FlutterTtsEngine implements TtsEngine {
   @override
   Future<void> speak(String text) async {
     await _tts.speak(text);
+  }
+
+  @override
+  Future<void> stop() async {
+    await _tts.stop();
   }
 }

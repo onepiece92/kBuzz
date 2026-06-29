@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy this file to dart_defines.json and paste your key. Get a FREE Gemini key at https://aistudio.google.com/apikey . The Run config 'kBuzz (AI keys)' passes this file via --dart-define-from-file.",
-  "GEMINI_API_KEY": "",
-  "GEMINI_MODEL": "gemini-2.0-flash"
+  "_comment": "Copy this file to dart_defines.json and paste your Anthropic (Claude) key. Get one at https://console.anthropic.com/settings/keys . The Run config 'kBuzz (AI keys)' passes the file via --dart-define-from-file, so a fresh install gets AI (scan + demo) without entering a key in Profile. dart_defines.json is gitignored — NEVER commit a real key; it also ships inside the build binary, so for a public release use a backend proxy instead.",
+  "ANTHROPIC_API_KEY": "",
+  "ANTHROPIC_MODEL": "claude-opus-4-8"
 }

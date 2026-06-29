@@ -12,9 +12,16 @@ void main() {
     // Boards start empty until data is generated.
     expect(find.textContaining('No tickets yet'), findsOneWidget);
 
-    // Go to Profile and generate the demo data. The button lives below several
-    // settings cards now, so scroll it into the lazily-built list first.
+    // Go to Profile and generate the demo data. Sections are collapsible now —
+    // open "Demo data" first, then reach its Generate button.
     await tester.tap(find.byIcon(Icons.person_outline));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Demo data'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Demo data'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(
       find.text('Generate demo data'),
@@ -28,10 +35,15 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Generate demo data'));
     await tester.pump(); // emit state + insert toast
-    // No AI key in tests → a randomized rush, so assert on the generic
-    // 'Table N' label rather than a specific number.
+    // No AI key in tests → a randomized rush. The demo summary lists each ticket
+    // labelled "Table N" (dine-in) or "Order N" (takeaway/delivery); assert at
+    // least one tile shows up either way (a rush may have no dine-in tickets).
     expect(find.text('Tickets'), findsWidgets);
-    expect(find.textContaining('Table '), findsWidgets);
+    expect(
+      find.textContaining('Table ').evaluate().isNotEmpty ||
+          find.textContaining('Order ').evaluate().isNotEmpty,
+      isTrue,
+    );
 
     // Let the top toast auto-dismiss so no timer outlives the test.
     await tester.pump(const Duration(seconds: 5));

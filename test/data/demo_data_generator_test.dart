@@ -291,4 +291,96 @@ void main() {
     expect(data.menu.single.emoji.runes.length, 8);
     expect(data.kots.single.lines.single.note, hasLength(80));
   });
+
+  test(
+      'station coherence: a hot dish on a cold station is repointed to a hot '
+      'station; a salad with a hot word stays put', () async {
+    final Map<String, Object?> input = <String, Object?>{
+      'stations': <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'grill', 'name': 'Grill', 'color': '#EF4444', 'capacity': 2,
+        },
+        <String, Object?>{
+          'id': 'fry', 'name': 'Fryer', 'color': '#F97316', 'capacity': 2,
+        },
+        <String, Object?>{
+          'id': 'cold', 'name': 'Cold & Sides', 'color': '#10B981',
+          'capacity': 3,
+        },
+      ],
+      'menu': <Map<String, Object?>>[
+        // Mismatch: a fried item parked on the cold line → moves to the Fryer.
+        <String, Object?>{
+          'id': 'calamari', 'name': 'Fried Calamari', 'emoji': '🦑',
+          'stationId': 'cold', 'cookMins': 6, 'holdable': false,
+          'batchable': false,
+        },
+        // Legit cold salad that carries a hot word → vetoed, must NOT move.
+        <String, Object?>{
+          'id': 'gcs', 'name': 'Grilled Chicken Salad', 'emoji': '🥗',
+          'stationId': 'cold', 'cookMins': 4, 'holdable': false,
+          'batchable': false,
+        },
+        // Already coherent → unchanged.
+        <String, Object?>{
+          'id': 'steak', 'name': 'Grilled Ribeye', 'emoji': '🥩',
+          'stationId': 'grill', 'cookMins': 14, 'holdable': true,
+          'batchable': false,
+        },
+      ],
+      'kots': <Map<String, Object?>>[
+        <String, Object?>{
+          'table': '5', 'type': 'dineIn', 'orderedMinsAgo': 1,
+          'lines': <Map<String, Object?>>[
+            <String, Object?>{'dishId': 'calamari', 'qty': 1},
+          ],
+        },
+      ],
+    };
+    final DemoDataGenerator gen = DemoDataGenerator(
+      client: MockClient((_) async => _resp(_claudeEnvelope(jsonEncode(input)))),
+      apiKey: 'g-test',
+    );
+    final DemoData data = _ok(await gen.generate(now: now));
+    Dish byId(String id) => data.menu.firstWhere((Dish d) => d.id == id);
+
+    expect(byId('calamari').stationId, 'fry'); // off cold → fits the fryer
+    expect(byId('gcs').stationId, 'cold'); // salad veto → stays
+    expect(byId('steak').stationId, 'grill'); // coherent → unchanged
+  });
+
+  test('station coherence: with no hot station, a misplaced dish is left as-is',
+      () async {
+    final Map<String, Object?> input = <String, Object?>{
+      'stations': <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'cold', 'name': 'Cold Bar', 'color': '#10B981', 'capacity': 2,
+        },
+        <String, Object?>{
+          'id': 'bar', 'name': 'Bar', 'color': '#14B8A6', 'capacity': 2,
+        },
+      ],
+      'menu': <Map<String, Object?>>[
+        <String, Object?>{
+          'id': 'wings', 'name': 'Buffalo Wings', 'emoji': '🍗',
+          'stationId': 'cold', 'cookMins': 8, 'holdable': false,
+          'batchable': false,
+        },
+      ],
+      'kots': <Map<String, Object?>>[
+        <String, Object?>{
+          'table': '7', 'type': 'dineIn', 'orderedMinsAgo': 0,
+          'lines': <Map<String, Object?>>[
+            <String, Object?>{'dishId': 'wings', 'qty': 1},
+          ],
+        },
+      ],
+    };
+    final DemoDataGenerator gen = DemoDataGenerator(
+      client: MockClient((_) async => _resp(_claudeEnvelope(jsonEncode(input)))),
+      apiKey: 'g-test',
+    );
+    final DemoData data = _ok(await gen.generate(now: now));
+    expect(data.menu.single.stationId, 'cold'); // nowhere hot to move it
+  });
 }

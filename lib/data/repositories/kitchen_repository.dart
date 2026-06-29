@@ -26,10 +26,23 @@ class KitchenRepository {
     List<MenuItemRow>? m;
     List<KotRow>? k;
     List<OrderLineRow>? l;
+    BoardMetaRow? meta;
+    // `meta` is legitimately null (no board yet), so gate on a received flag
+    // rather than non-null — otherwise an epoch-less first emit could slip out.
+    bool metaSeen = false;
 
     void maybeEmit() {
-      if (s != null && m != null && k != null && l != null) {
-        controller.add(_assemble(s!, m!, k!, l!));
+      if (s != null && m != null && k != null && l != null && metaSeen) {
+        final int? epochMs = meta?.epochMs;
+        controller.add(_assemble(
+          s!,
+          m!,
+          k!,
+          l!,
+          generatedAt:
+              epochMs == null ? null : DateTime.fromMillisecondsSinceEpoch(epochMs),
+          speed: meta?.speed,
+        ));
       }
     }
 
@@ -50,6 +63,11 @@ class KitchenRepository {
         l = v;
         maybeEmit();
       }),
+      _db.watchBoardMeta().listen((BoardMetaRow? v) {
+        meta = v;
+        metaSeen = true;
+        maybeEmit();
+      }),
     ];
 
     controller.onCancel = () async {
@@ -60,13 +78,16 @@ class KitchenRepository {
     return controller.stream;
   }
 
-  /// One-shot snapshot (used by tests / non-reactive callers).
+  /// One-shot snapshot (used by the cubit's cold-start hydrate). Carries the
+  /// durable board epoch + run speed so a restart resumes the real timeline.
   Future<DemoData> loadSnapshot() async {
     return _assemble(
       await _db.allStations(),
       await _db.allMenu(),
       await _db.allKots(),
       await _db.allOrderLines(),
+      generatedAt: await _db.loadEpoch(),
+      speed: await _db.loadSpeed(),
     );
   }
 
@@ -89,6 +110,10 @@ class KitchenRepository {
     await _db.transaction(() async {
       await _deleteAll();
       await _insertSnapshot(data);
+      // Persist the board epoch + speed atomically with the snapshot so a
+      // restart resumes the real timeline (epoch null ⇒ cleared above).
+      if (data.generatedAt != null) await _db.saveEpoch(data.generatedAt);
+      if (data.speed != null) await _db.saveSpeed(data.speed!);
     });
     return loadSnapshot();
   }
@@ -122,6 +147,16 @@ class KitchenRepository {
       await _insertKot(kot);
     }
   }
+
+  /// Persist the run-speed multiplier on the board-meta row (so a restart
+  /// resumes at the same rate). Written by the run clock on start / speed change.
+  Future<void> saveSpeed(int speed) => _db.saveSpeed(speed);
+
+  /// The persisted board epoch, if any (the schedule `now` to resume at).
+  Future<DateTime?> loadEpoch() => _db.loadEpoch();
+
+  /// The persisted run-speed multiplier, if any.
+  Future<int?> loadSpeed() => _db.loadSpeed();
 
   /// Update a single station's concurrent [capacity] (the only station field the
   /// UI edits today). Marks the row dirty for the eventual sync engine.
@@ -283,20 +318,24 @@ class KitchenRepository {
   /// Wipe everything (config + tickets).
   Future<void> clearAll() => _db.transaction(_deleteAll);
 
-  /// Delete every row across all four tables. Caller must wrap in a transaction.
+  /// Delete every row across all tables (incl. the board-meta epoch). Caller must
+  /// wrap in a transaction.
   Future<void> _deleteAll() async {
     await _db.delete(_db.orderLines).go();
     await _db.delete(_db.kots).go();
     await _db.delete(_db.menuItems).go();
     await _db.delete(_db.stations).go();
+    await _db.deleteBoardMeta();
   }
 
   DemoData _assemble(
     List<StationRow> s,
     List<MenuItemRow> m,
     List<KotRow> k,
-    List<OrderLineRow> l,
-  ) {
+    List<OrderLineRow> l, {
+    DateTime? generatedAt,
+    int? speed,
+  }) {
     final List<Station> stations = <Station>[
       for (final StationRow r in s)
         Station(id: r.id, name: r.name, color: r.color, capacity: r.capacity),
@@ -341,6 +380,12 @@ class KitchenRepository {
           rush: r.rush,
         ),
     ];
-    return DemoData(stations: stations, menu: menu, kots: kots);
+    return DemoData(
+      stations: stations,
+      menu: menu,
+      kots: kots,
+      generatedAt: generatedAt,
+      speed: speed,
+    );
   }
 }

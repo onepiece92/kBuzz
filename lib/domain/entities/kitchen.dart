@@ -125,6 +125,7 @@ class OrderLine extends Equatable {
     this.reAt,
     this.reason,
     this.note,
+    this.reFireSeq = 0,
   });
 
   /// Stable line id (assigned once persisted). Every waiter action targets it;
@@ -156,6 +157,14 @@ class OrderLine extends Equatable {
   /// Recook reason; null on a plain expedite/fire-missing.
   final String? reason;
 
+  /// Monotonic re-fire counter, bumped on **every** re-fire (fire-now / recook).
+  /// It makes each re-fire a distinct scheduled cook — and so a distinct
+  /// [fireKey] — even when two re-fires land in the same board minute, so the
+  /// second still re-announces instead of being swallowed as already-alerted.
+  /// Transient (not persisted): a restart re-arms alerts via backlog priming, so
+  /// it need not survive — it only has to be stable within a live run.
+  final int reFireSeq;
+
   OrderLine copyWith({
     String? id,
     String? dishId,
@@ -166,6 +175,7 @@ class OrderLine extends Equatable {
     int? reAt,
     String? reason,
     String? note,
+    int? reFireSeq,
     bool clearReAt = false,
     bool clearReason = false,
     bool clearNote = false,
@@ -180,6 +190,7 @@ class OrderLine extends Equatable {
         reAt: clearReAt ? null : (reAt ?? this.reAt),
         reason: clearReason ? null : (reason ?? this.reason),
         note: clearNote ? null : (note ?? this.note),
+        reFireSeq: reFireSeq ?? this.reFireSeq,
       );
 
   @override
@@ -193,6 +204,7 @@ class OrderLine extends Equatable {
         reAt,
         reason,
         note,
+        reFireSeq,
       ];
 }
 

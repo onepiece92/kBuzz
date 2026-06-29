@@ -9,15 +9,33 @@ class DemoData {
     required this.stations,
     required this.menu,
     required this.kots,
+    this.generatedAt,
+    this.speed,
   });
 
   final List<Station> stations;
   final List<Dish> menu;
   final List<Kot> kots;
 
+  /// The board epoch (schedule `now`) this snapshot belongs to, when known —
+  /// carried so it can be persisted/restored across restarts. Null for freshly
+  /// built demo data (the cubit stamps it).
+  final DateTime? generatedAt;
+
+  /// The run-speed multiplier in effect when persisted, for faithful resume.
+  final int? speed;
+
   /// Total dishes across all tickets (sum of line quantities).
   int get totalDishes =>
       kots.expand((Kot k) => k.lines).fold(0, (int sum, OrderLine l) => sum + l.qty);
+
+  DemoData copyWith({DateTime? generatedAt, int? speed}) => DemoData(
+        stations: stations,
+        menu: menu,
+        kots: kots,
+        generatedAt: generatedAt ?? this.generatedAt,
+        speed: speed ?? this.speed,
+      );
 }
 
 /// Build the prototype's sample dataset (`MultiKOT.jsx` STATIONS / MENU /
@@ -90,14 +108,16 @@ DemoData buildDemoData({required DateTime now}) {
   return DemoData(stations: stations, menu: menu, kots: kots);
 }
 
-/// Build a randomized, *longer* demo rush against the same fixed restaurant
-/// config as [buildDemoData].
+/// Build a randomized demo rush against the same fixed restaurant config as
+/// [buildDemoData].
 ///
 /// The stations and menu are the fixed prototype set (so their colours,
 /// capacities and ids stay valid for the boards and scheduler); only the
-/// **tickets** vary — a different rush of 6–12 tickets, each ordering 1–4 random
-/// dishes, with random tables, types and order times. This is the no-AI fallback
-/// for "Generate demo data": no key required, but a fresh board every tap.
+/// **tickets** vary — a different rush of 3–6 tickets, each ordering 1–3 random
+/// dishes drawn from a handful (4–5) of the stations so the board stays
+/// readable, with random tables, types and order times. The full menu still
+/// ships; the boards render only the stations that have dishes. This is the
+/// no-AI fallback for "Generate demo data": no key required, fresh board a tap.
 ///
 /// Pure given (`now`, `random`): pass a seeded [Random] for a deterministic
 /// result in tests; omit it for a genuinely different rush each call.
@@ -106,12 +126,26 @@ DemoData buildRandomDemoData({required DateTime now, Random? random}) {
   final List<Station> stations = _demoStations();
   final List<Dish> menu = _demoMenu();
 
-  final int ticketCount = 6 + rng.nextInt(7); // 6..12
+  // Keep the rush to a handful of stations so the board's rails stay readable.
+  // The full menu still ships in the data; we just don't order from every
+  // station, and the boards only render stations that have dishes — so the
+  // result is a cleaner board without touching the (golden) station/menu config.
+  final int activeCount = 4 + rng.nextInt(2); // 4..5 of the 9 stations
+  final Set<String> activeIds = (List<Station>.of(stations)..shuffle(rng))
+      .take(activeCount)
+      .map((Station s) => s.id)
+      .toSet();
+  final List<Dish> orderable =
+      menu.where((Dish d) => activeIds.contains(d.stationId)).toList();
+  // Defensive: never end up with an empty pool.
+  final List<Dish> orderPool = orderable.isEmpty ? menu : orderable;
+
+  final int ticketCount = 3 + rng.nextInt(4); // 3..6
   final List<Kot> kots = <Kot>[];
   for (int i = 0; i < ticketCount; i++) {
     final KotType type = KotType.values[rng.nextInt(KotType.values.length)];
-    final int lineCount = 1 + rng.nextInt(4); // 1..4 distinct dishes
-    final List<Dish> pool = List<Dish>.of(menu)..shuffle(rng);
+    final int lineCount = 1 + rng.nextInt(3); // 1..3 distinct dishes
+    final List<Dish> pool = List<Dish>.of(orderPool)..shuffle(rng);
     final List<OrderLine> lines = <OrderLine>[
       for (final Dish d in pool.take(lineCount))
         OrderLine(
@@ -135,6 +169,41 @@ DemoData buildRandomDemoData({required DateTime now, Random? random}) {
   }
 
   return DemoData(stations: stations, menu: menu, kots: kots);
+}
+
+/// Build **one** randomized ticket against [menu], ordered at [now] — the "a new
+/// order just came in" drip used to simulate real-world tickets arriving while
+/// the service is already running. [id] must be unique (pass a fresh uuid).
+/// Returns a ticket with 1–4 dishes drawn from the menu, a random table/type,
+/// and the occasional special instruction. Uses only existing menu dish ids, so
+/// it needs no new dishes added to the board.
+Kot buildRandomKot({
+  required DateTime now,
+  required List<Dish> menu,
+  required String id,
+  Random? random,
+}) {
+  final Random rng = random ?? Random();
+  final KotType type = KotType.values[rng.nextInt(KotType.values.length)];
+  final int lineCount = 1 + rng.nextInt(4); // 1..4 distinct dishes
+  final List<Dish> pool = List<Dish>.of(menu)..shuffle(rng);
+  final List<OrderLine> lines = <OrderLine>[
+    for (final Dish d in pool.take(lineCount))
+      OrderLine(
+        dishId: d.id,
+        qty: rng.nextInt(4) == 0 ? 2 : 1,
+        note: rng.nextInt(3) == 0
+            ? _demoNotes[rng.nextInt(_demoNotes.length)]
+            : null,
+      ),
+  ];
+  return Kot(
+    id: id,
+    table: _randomTable(type, rng),
+    type: type,
+    orderedAt: now,
+    lines: lines,
+  );
 }
 
 /// Curated special instructions sprinkled onto the random rush so the note

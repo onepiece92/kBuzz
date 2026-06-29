@@ -9,6 +9,7 @@ import 'package:kbuzz/domain/entities/kitchen.dart';
 import 'package:kbuzz/features/profile/cubit/demo_data_cubit.dart';
 import 'package:kbuzz/features/profile/cubit/settings_cubit.dart';
 import 'package:kbuzz/features/scan/scan_page.dart';
+import 'package:kbuzz/features/service/cubit/service_clock_cubit.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Profile / settings tab.
@@ -54,119 +55,182 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-/// Settings panel. Currently the fire-toast hold time — how long a "fire next"
-/// alert stays on screen (it also clears on a newer fire or a pause/reset).
-class _SettingsCard extends StatelessWidget {
-  const _SettingsCard();
+/// A collapsible Profile card: an [ExpansionTile] inside a surface [Card] with a
+/// brand icon, a bold title, an optional header widget (e.g. the AI badge), and a
+/// body revealed on tap. Keeps the Profile page short — each section opens only
+/// when needed (the long demo-data summary stays tucked away by default).
+class _CollapsibleSection extends StatelessWidget {
+  const _CollapsibleSection({
+    required this.icon,
+    required this.title,
+    required this.child,
+    this.headerTrailing,
+    this.initiallyExpanded = false,
+    this.maintainState = false,
+  });
+
+  final IconData icon;
+  final String title;
+  final Widget child;
+
+  /// Shown in the header to the right of the title, before the expand chevron
+  /// (e.g. the demo card's AI badge) — visible whether open or closed.
+  final Widget? headerTrailing;
+  final bool initiallyExpanded;
+
+  /// Keep [child] alive while collapsed (use for sections holding input state,
+  /// e.g. the API-key field, so typed text survives a collapse).
+  final bool maintainState;
 
   @override
   Widget build(BuildContext context) {
     final KdsColors c = KdsColors.of(context);
     return Card(
       color: c.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(kSpaceLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.local_fire_department, size: 18, color: c.brand),
-                const SizedBox(width: kSpaceSm),
-                const Text(
-                  'Fire toast display time',
-                  style: TextStyle(
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        // ExpansionTile draws default divider lines when expanded; hide them.
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          maintainState: maintainState,
+          tilePadding: const EdgeInsets.symmetric(horizontal: kSpaceLg),
+          childrenPadding: const EdgeInsets.fromLTRB(
+            kSpaceLg,
+            kSpaceSm,
+            kSpaceLg,
+            kSpaceLg,
+          ),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          iconColor: c.brand,
+          collapsedIconColor: c.textMuted,
+          leading: Icon(icon, size: 20, color: c.brand),
+          title: Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
                     fontSize: kFontLg,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+              ),
+              if (headerTrailing != null) ...<Widget>[
+                headerTrailing!,
+                const SizedBox(width: kSpaceSm),
               ],
-            ),
-            const SizedBox(height: kSpaceXs),
-            Text(
-              'How long a “fire next” alert stays on screen before it '
-              'auto-dismisses. It also clears when a newer fire arrives or the '
-              'run is paused.',
-              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
-            ),
-            const SizedBox(height: kSpaceLg),
-            BlocBuilder<SettingsCubit, SettingsState>(
-              builder: (BuildContext context, SettingsState state) {
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    for (final FireToastPreset preset in kFireToastPresets)
-                      _PresetChip(
-                        preset: preset,
-                        selected: state.fireToastDuration == preset.duration,
-                        onTap: () => context
-                            .read<SettingsCubit>()
-                            .setFireToastDuration(preset.duration),
-                      ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: kSpaceSm),
-            Divider(color: c.hairline, height: 1),
-            const SizedBox(height: kSpaceXs),
-            BlocBuilder<SettingsCubit, SettingsState>(
-              builder: (BuildContext context, SettingsState state) => Row(
+            ],
+          ),
+          children: <Widget>[child],
+        ),
+      ),
+    );
+  }
+}
+
+/// Settings panel: fire-toast hold time, audio, cook-timing, auto-serve, rail
+/// width and theme, grouped under Alerts / Service / Display. Collapsed by
+/// default — like every Profile section — so the page opens compact on each
+/// app start / refresh; tap to expand.
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
+    return _CollapsibleSection(
+      icon: Icons.tune,
+      title: 'Settings',
+      initiallyExpanded: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const _GroupLabel('Alerts'),
+          const SizedBox(height: kSpaceSm),
+          _SettingHeader(
+            icon: Icons.local_fire_department,
+            title: 'Fire toast display time',
+          ),
+          const SizedBox(height: kSpaceXs),
+          Text(
+            'How long a “fire next” alert stays on screen before it '
+            'auto-dismisses. It also clears when a newer fire arrives or the '
+            'run is paused.',
+            style: TextStyle(color: c.textMuted, fontSize: kFontSm),
+          ),
+          const SizedBox(height: kSpaceSm),
+          BlocBuilder<SettingsCubit, SettingsState>(
+            builder: (BuildContext context, SettingsState state) {
+              return Wrap(
+                spacing: kSpaceSm,
+                runSpacing: kSpaceSm,
                 children: <Widget>[
-                  Icon(
-                    state.announceEnabled ? Icons.volume_up : Icons.volume_off,
+                  for (final FireToastPreset preset in kFireToastPresets)
+                    _SettingChip(
+                      label: preset.label,
+                      selected: state.fireToastDuration == preset.duration,
+                      onTap: () => context
+                          .read<SettingsCubit>()
+                          .setFireToastDuration(preset.duration),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: kSpaceXs),
+          BlocBuilder<SettingsCubit, SettingsState>(
+            builder: (BuildContext context, SettingsState state) => SwitchListTile(
+              key: const Key('announceToggle'),
+              contentPadding: EdgeInsets.zero,
+              isThreeLine: true,
+              value: state.announceEnabled,
+              onChanged: context.read<SettingsCubit>().setAnnounceEnabled,
+              secondary: Icon(
+                state.announceEnabled ? Icons.volume_up : Icons.volume_off,
+                size: 18,
+                color: c.brand,
+              ),
+              title: const Text(
+                'Read fires aloud',
+                style: TextStyle(
+                  fontSize: kFontMd,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              subtitle: Text(
+                'Speak each fire alert aloud — the on-screen toast still shows '
+                'when this is off.',
+                style: TextStyle(color: c.textMuted, fontSize: kFontSm),
+              ),
+            ),
+          ),
+          const SizedBox(height: kSpaceLg),
+          Divider(color: c.hairline, height: 1),
+          const SizedBox(height: kSpaceSm),
+          const _GroupLabel('Service'),
+          const SizedBox(height: kSpaceXs),
+          BlocBuilder<SettingsCubit, SettingsState>(
+            builder: (BuildContext context, SettingsState state) =>
+                SwitchListTile(
+                  key: const Key('fireImmediatelyToggle'),
+                  contentPadding: EdgeInsets.zero,
+                  isThreeLine: true,
+                  value: state.fireImmediately,
+                  onChanged: context.read<SettingsCubit>().setFireImmediately,
+                  secondary: Icon(
+                    Icons.timer_outlined,
                     size: 18,
                     color: c.brand,
                   ),
-                  const SizedBox(width: kSpaceSm),
-                  const Expanded(
-                    child: Text(
-                      'Read fires aloud',
-                      style: TextStyle(
-                        fontSize: kFontMd,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  title: const Text(
+                    'Start cooking immediately',
+                    style: TextStyle(
+                      fontSize: kFontMd,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  Switch(
-                    key: const Key('announceToggle'),
-                    value: state.announceEnabled,
-                    onChanged: (bool v) =>
-                        context.read<SettingsCubit>().setAnnounceEnabled(v),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: kSpaceSm),
-            Divider(color: c.hairline, height: 1),
-            const SizedBox(height: kSpaceXs),
-            BlocBuilder<SettingsCubit, SettingsState>(
-              builder: (BuildContext context, SettingsState state) => Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Row(
-                    children: <Widget>[
-                      Icon(Icons.timer_outlined, size: 18, color: c.brand),
-                      const SizedBox(width: kSpaceSm),
-                      const Expanded(
-                        child: Text(
-                          'Start cooking immediately',
-                          style: TextStyle(
-                            fontSize: kFontMd,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      Switch(
-                        key: const Key('fireImmediatelyToggle'),
-                        value: state.fireImmediately,
-                        onChanged: (bool v) =>
-                            context.read<SettingsCubit>().setFireImmediately(v),
-                      ),
-                    ],
-                  ),
-                  Text(
+                  subtitle: Text(
                     state.fireImmediately
                         ? 'Every dish fires as soon as its station is free — '
                               'stations start right away.'
@@ -174,96 +238,183 @@ class _SettingsCard extends StatelessWidget {
                               'when due, so a station may sit idle first.',
                     style: TextStyle(color: c.textMuted, fontSize: kFontSm),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: kSpaceSm),
-            Divider(color: c.hairline, height: 1),
-            const SizedBox(height: kSpaceXs),
-            Row(
-              children: <Widget>[
-                Icon(Icons.palette_outlined, size: 18, color: c.brand),
-                const SizedBox(width: kSpaceSm),
-                const Expanded(
-                  child: Text(
-                    'Theme',
-                    style: TextStyle(
-                      fontSize: kFontMd,
-                      fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: kSpaceXs),
+          BlocBuilder<SettingsCubit, SettingsState>(
+            builder: (BuildContext context, SettingsState state) {
+              final SettingsCubit cubit = context.read<SettingsCubit>();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  SwitchListTile(
+                    key: const Key('autoServeToggle'),
+                    contentPadding: EdgeInsets.zero,
+                    isThreeLine: true,
+                    value: state.autoServeEnabled,
+                    onChanged: cubit.setAutoServeEnabled,
+                    secondary: Icon(Icons.task_alt, size: 18, color: c.brand),
+                    title: const Text(
+                      'Auto serve & close ready tickets',
+                      style: TextStyle(
+                        fontSize: kFontMd,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Once every item on a ticket has been ready for the '
+                      'delay below, it’s served and moved to Done '
+                      'automatically — so the Tickets board stays clean.',
+                      style: TextStyle(color: c.textMuted, fontSize: kFontSm),
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: kSpaceSm),
-            BlocBuilder<SettingsCubit, SettingsState>(
-              builder: (BuildContext context, SettingsState state) {
-                final SettingsCubit cubit = context.read<SettingsCubit>();
-                return Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: <Widget>[
-                    _ThemeChip(
-                      label: 'System',
-                      selected: state.themeMode == ThemeMode.system,
-                      onTap: () => cubit.setThemeMode(ThemeMode.system),
+                  if (state.autoServeEnabled) ...<Widget>[
+                    const SizedBox(height: kSpaceXs),
+                    Text(
+                      'Delay after ready',
+                      style: TextStyle(color: c.textMuted, fontSize: kFontSm),
                     ),
-                    _ThemeChip(
-                      label: 'Light',
-                      selected: state.themeMode == ThemeMode.light,
-                      onTap: () => cubit.setThemeMode(ThemeMode.light),
-                    ),
-                    _ThemeChip(
-                      label: 'Dark',
-                      selected: state.themeMode == ThemeMode.dark,
-                      onTap: () => cubit.setThemeMode(ThemeMode.dark),
+                    const SizedBox(height: kSpaceXs),
+                    Wrap(
+                      spacing: kSpaceSm,
+                      runSpacing: kSpaceSm,
+                      children: <Widget>[
+                        for (final FireToastPreset p in kAutoServePresets)
+                          _SettingChip(
+                            label: p.label,
+                            selected: state.autoServeDelay == p.duration,
+                            onTap: () => cubit.setAutoServeDelay(p.duration),
+                          ),
+                      ],
                     ),
                   ],
-                );
-              },
-            ),
-          ],
-        ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: kSpaceLg),
+          Divider(color: c.hairline, height: 1),
+          const SizedBox(height: kSpaceSm),
+          const _GroupLabel('Display'),
+          const SizedBox(height: kSpaceXs),
+          _SettingHeader(
+            icon: Icons.view_timeline_outlined,
+            title: 'Stations timeline width',
+          ),
+          const SizedBox(height: kSpaceXs),
+          Text(
+            'How much time the Stations rail shows at once before it '
+            'scrolls. Smaller = bigger, easier-to-read bars.',
+            style: TextStyle(color: c.textMuted, fontSize: kFontSm),
+          ),
+          const SizedBox(height: kSpaceSm),
+          BlocBuilder<SettingsCubit, SettingsState>(
+            builder: (BuildContext context, SettingsState state) {
+              final SettingsCubit cubit = context.read<SettingsCubit>();
+              return Wrap(
+                spacing: kSpaceSm,
+                runSpacing: kSpaceSm,
+                children: <Widget>[
+                  for (final int m in kRailWindowPresets)
+                    _SettingChip(
+                      label: '$m min',
+                      selected: state.railWindowMins == m,
+                      onTap: () => cubit.setRailWindowMins(m),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: kSpaceMd),
+          _SettingHeader(icon: Icons.palette_outlined, title: 'Theme'),
+          const SizedBox(height: kSpaceSm),
+          BlocBuilder<SettingsCubit, SettingsState>(
+            builder: (BuildContext context, SettingsState state) {
+              final SettingsCubit cubit = context.read<SettingsCubit>();
+              return Wrap(
+                spacing: kSpaceSm,
+                runSpacing: kSpaceSm,
+                children: <Widget>[
+                  _SettingChip(
+                    label: 'System',
+                    selected: state.themeMode == ThemeMode.system,
+                    onTap: () => cubit.setThemeMode(ThemeMode.system),
+                  ),
+                  _SettingChip(
+                    label: 'Light',
+                    selected: state.themeMode == ThemeMode.light,
+                    onTap: () => cubit.setThemeMode(ThemeMode.light),
+                  ),
+                  _SettingChip(
+                    label: 'Dark',
+                    selected: state.themeMode == ThemeMode.dark,
+                    onTap: () => cubit.setThemeMode(ThemeMode.dark),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
       ),
     );
   }
 }
 
-/// A selectable preset chip for the fire-toast hold time.
-class _PresetChip extends StatelessWidget {
-  const _PresetChip({
-    required this.preset,
-    required this.selected,
-    required this.onTap,
-  });
+/// A small muted section label that groups related settings within a card
+/// (e.g. "Alerts", "Service", "Display").
+class _GroupLabel extends StatelessWidget {
+  const _GroupLabel(this.text);
 
-  final FireToastPreset preset;
-  final bool selected;
-  final VoidCallback onTap;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     final KdsColors c = KdsColors.of(context);
-    return ChoiceChip(
-      label: Text(preset.label),
-      selected: selected,
-      showCheckmark: false,
-      backgroundColor: c.board,
-      selectedColor: c.brand,
-      side: BorderSide(color: selected ? c.brand : c.hairlineStrong),
-      labelStyle: TextStyle(
-        color: selected ? Colors.white : c.textSecondary,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+    return Text(
+      text.toUpperCase(),
+      style: TextStyle(
+        color: c.textFaint,
+        fontSize: kFontXs,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.6,
       ),
-      onSelected: (_) => onTap(),
     );
   }
 }
 
-/// A selectable theme-mode chip (System / Light / Dark), styled like
-/// [_PresetChip].
-class _ThemeChip extends StatelessWidget {
-  const _ThemeChip({
+/// An icon + title row used as the header for a non-toggle setting (one whose
+/// control is a chip row below it), matching the [SwitchListTile] toggles' look.
+class _SettingHeader extends StatelessWidget {
+  const _SettingHeader({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
+    return Row(
+      children: <Widget>[
+        Icon(icon, size: 18, color: c.brand),
+        const SizedBox(width: kSpaceSm),
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(
+              fontSize: kFontMd,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// A selectable settings chip — one shared style for every preset/option picker
+/// in Profile (fire-toast time, auto-serve delay, rail width, theme, drip rate).
+class _SettingChip extends StatelessWidget {
+  const _SettingChip({
     required this.label,
     required this.selected,
     required this.onTap,
@@ -284,7 +435,8 @@ class _ThemeChip extends StatelessWidget {
       selectedColor: c.brand,
       side: BorderSide(color: selected ? c.brand : c.hairlineStrong),
       labelStyle: TextStyle(
-        color: selected ? Colors.white : c.textSecondary,
+        // Dark ink on the orange fill — white misses WCAG AA on the brand.
+        color: selected ? c.onBrand : c.textSecondary,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
       ),
       onSelected: (_) => onTap(),
@@ -306,7 +458,6 @@ class _ApiKeyCard extends StatefulWidget {
 
 class _ApiKeyCardState extends State<_ApiKeyCard> {
   final TextEditingController _controller = TextEditingController();
-  bool _obscure = true;
 
   @override
   void initState() {
@@ -341,57 +492,37 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
   @override
   Widget build(BuildContext context) {
     final KdsColors c = KdsColors.of(context);
-    return Card(
-      color: c.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(kSpaceLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.key, size: 18, color: c.brand),
-                const SizedBox(width: kSpaceSm),
-                const Text(
-                  'Claude API key',
-                  style: TextStyle(
-                    fontSize: kFontLg,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+    return _CollapsibleSection(
+      icon: Icons.key,
+      title: 'Claude API key',
+      maintainState: true, // keep typed text if the section is collapsed
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Powers scanning a ticket photo and AI demo-data generation. '
+            'Stored on this device only; leave blank to use manual entry and '
+            'the built-in sample.',
+            style: TextStyle(color: c.textMuted, fontSize: kFontMd),
+          ),
+          const SizedBox(height: kSpaceMd),
+          TextField(
+            controller: _controller,
+            // Always masked — the key is write-only from the UI (no reveal).
+            obscureText: true,
+            autocorrect: false,
+            enableSuggestions: false,
+            decoration: const InputDecoration(
+              hintText: 'sk-ant-…',
+              isDense: true,
+              border: OutlineInputBorder(),
             ),
-            const SizedBox(height: kSpaceXs),
-            Text(
-              'Powers scanning a ticket photo and AI demo-data generation. '
-              'Stored on this device only; leave blank to use manual entry and '
-              'the built-in sample.',
-              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
-            ),
-            const SizedBox(height: kSpaceMd),
-            TextField(
-              controller: _controller,
-              obscureText: _obscure,
-              autocorrect: false,
-              enableSuggestions: false,
-              decoration: InputDecoration(
-                hintText: 'sk-ant-…',
-                isDense: true,
-                border: const OutlineInputBorder(),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _obscure ? Icons.visibility : Icons.visibility_off,
-                    size: 20,
-                  ),
-                  onPressed: () => setState(() => _obscure = !_obscure),
-                  tooltip: _obscure ? 'Show' : 'Hide',
-                ),
-              ),
-            ),
-            const SizedBox(height: kSpaceMd),
-            Row(
-              children: <Widget>[
-                BlocBuilder<SettingsCubit, SettingsState>(
+          ),
+          const SizedBox(height: kSpaceMd),
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: BlocBuilder<SettingsCubit, SettingsState>(
                   builder: (BuildContext context, SettingsState state) => Row(
                     children: <Widget>[
                       Icon(
@@ -399,29 +530,32 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
                             ? Icons.check_circle
                             : Icons.info_outline,
                         size: 16,
-                        color: state.aiConfigured ? c.expoReady : c.textFaint,
+                        color: state.aiConfigured ? c.success : c.textFaint,
                       ),
                       const SizedBox(width: kSpaceSm),
-                      Text(
-                        state.aiConfigured
-                            ? 'AI features on'
-                            : 'AI features off',
-                        style: TextStyle(
-                          color: state.aiConfigured ? c.expoReady : c.textMuted,
-                          fontSize: kFontMd,
+                      Flexible(
+                        child: Text(
+                          state.aiConfigured
+                              ? 'AI features on'
+                              : 'AI features off',
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: state.aiConfigured ? c.success : c.textMuted,
+                            fontSize: kFontMd,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const Spacer(),
-                TextButton(onPressed: _getKey, child: const Text('Get a key')),
-                const SizedBox(width: kSpaceXs),
-                FilledButton(onPressed: _save, child: const Text('Save')),
-              ],
-            ),
-          ],
-        ),
+              ),
+              const SizedBox(width: kSpaceXs),
+              TextButton(onPressed: _getKey, child: const Text('Get a key')),
+              const SizedBox(width: kSpaceXs),
+              FilledButton(onPressed: _save, child: const Text('Save')),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -431,6 +565,26 @@ class _ApiKeyCardState extends State<_ApiKeyCard> {
 /// [DemoDataCubit] currently holds.
 class _DemoDataCard extends StatelessWidget {
   const _DemoDataCard();
+
+  /// Drop **one** fresh ticket onto the live board — simulates a new order
+  /// arriving mid-service. Ordered at the current run time (board epoch + the
+  /// service clock's elapsed) so it appears at the now-line, just like a KOT that
+  /// just came in. No-op when there's no board yet.
+  void _addTicket(BuildContext context) {
+    final DemoDataCubit cubit = context.read<DemoDataCubit>();
+    final Duration elapsed = context.read<ServiceClockCubit>().state.elapsed;
+    final Kot? kot = cubit.addRandomKot(elapsed: elapsed);
+    if (kot == null || !context.mounted) return;
+    final int items = kot.lines.fold<int>(
+      0,
+      (int sum, OrderLine l) => sum + l.qty,
+    );
+    AppToast.success(
+      context,
+      'New ticket — #${kot.table}, $items ${items == 1 ? 'dish' : 'dishes'}.',
+      note: 'Added to the live board at the current time.',
+    );
+  }
 
   Future<void> _generate(BuildContext context) async {
     final DemoDataCubit cubit = context.read<DemoDataCubit>();
@@ -466,98 +620,152 @@ class _DemoDataCard extends StatelessWidget {
     final bool aiEnabled = context.watch<SettingsCubit>().state.aiConfigured;
     final String provider = context.read<DemoDataCubit>().aiProvider;
     final KdsColors c = KdsColors.of(context);
-    return Card(
-      color: c.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(kSpaceLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                const Text(
-                  'Demo data',
-                  style: TextStyle(
-                    fontSize: kFontLg,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                _AiBadge(enabled: aiEnabled, provider: provider),
-              ],
-            ),
-            const SizedBox(height: kSpaceXs),
-            Text(
-              aiEnabled
-                  ? 'Generate a brand-new restaurant and dinner rush with '
-                        '$provider — a different menu and tickets every time.'
-                  : 'Seed the prototype sample rush so you can test the boards. '
-                        'For a fresh AI dataset every time, add a Claude key '
-                        'in the “Claude API key” section below.',
-              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
-            ),
-            const SizedBox(height: kSpaceLg),
-            BlocBuilder<DemoDataCubit, DemoDataState>(
-              builder: (BuildContext context, DemoDataState state) {
-                final bool busy = state.generating;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        Expanded(
-                          child: FilledButton.icon(
-                            onPressed: busy ? null : () => _generate(context),
-                            icon: busy
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: Colors.white,
-                                    ),
-                                  )
-                                : const Icon(Icons.auto_awesome),
-                            label: Text(
-                              busy
-                                  ? (aiEnabled
-                                        ? 'Generating with AI…'
-                                        : 'Generating…')
-                                  : state.hasData
-                                  ? 'Regenerate demo data'
-                                  : 'Generate demo data',
-                            ),
+    return _CollapsibleSection(
+      icon: Icons.science_outlined,
+      title: 'Demo data',
+      headerTrailing: _AiBadge(enabled: aiEnabled, provider: provider),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            aiEnabled
+                ? 'Generate a brand-new restaurant and dinner rush with '
+                      '$provider — a different menu and tickets every time.'
+                : 'Seed the prototype sample rush so you can test the boards. '
+                      'For a fresh AI dataset every time, add a Claude key '
+                      'in the “Claude API key” section below.',
+            style: TextStyle(color: c.textMuted, fontSize: kFontMd),
+          ),
+          const SizedBox(height: kSpaceLg),
+          BlocBuilder<DemoDataCubit, DemoDataState>(
+            builder: (BuildContext context, DemoDataState state) {
+              final bool busy = state.generating;
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: busy ? null : () => _generate(context),
+                          icon: busy
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.auto_awesome),
+                          label: Text(
+                            busy
+                                ? (aiEnabled
+                                      ? 'Generating with AI…'
+                                      : 'Generating…')
+                                : state.hasData
+                                ? 'Regenerate demo data'
+                                : 'Generate demo data',
                           ),
                         ),
-                        if (state.hasData) ...<Widget>[
-                          const SizedBox(width: kSpaceSm),
-                          IconButton(
-                            tooltip: 'Clear demo data',
-                            onPressed: busy
-                                ? null
-                                : () {
-                                    context.read<DemoDataCubit>().clear();
-                                    AppToast.show(
-                                      context,
-                                      'Demo data cleared.',
-                                    );
-                                  },
-                            icon: const Icon(Icons.delete_outline),
-                          ),
-                        ],
+                      ),
+                      if (state.hasData) ...<Widget>[
+                        const SizedBox(width: kSpaceSm),
+                        IconButton(
+                          tooltip: 'Clear demo data',
+                          onPressed: busy
+                              ? null
+                              : () {
+                                  context.read<DemoDataCubit>().clear();
+                                  AppToast.show(context, 'Demo data cleared.');
+                                },
+                          icon: const Icon(Icons.delete_outline),
+                        ),
                       ],
-                    ),
-                    if (state.data != null) ...<Widget>[
-                      const SizedBox(height: kSpaceLg),
-                      _DemoSummary(data: state.data!),
                     ],
+                  ),
+                  // A "new order just came in" drip: adds one ticket at the
+                  // current run time so you can watch the boards react live,
+                  // like a real service. Only meaningful once a board exists.
+                  if (state.hasData) ...<Widget>[
+                    const SizedBox(height: kSpaceSm),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: busy ? null : () => _addTicket(context),
+                        icon: const Icon(Icons.receipt_long),
+                        label: const Text('Add a ticket'),
+                      ),
+                    ),
+                    const _AutoDripControl(),
                   ],
-                );
-              },
-            ),
-          ],
-        ),
+                  if (state.data != null) ...<Widget>[
+                    const SizedBox(height: kSpaceLg),
+                    _DemoSummary(data: state.data!),
+                  ],
+                ],
+              );
+            },
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// The interval presets offered for the auto-ticket drip, in run minutes.
+const List<int> _kAutoDripMinutes = <int>[1, 2, 3, 5, 10];
+
+/// Toggle + interval picker for the auto-ticket drip (Profile → Demo data). When
+/// on, [AutoDripListener] adds one randomized ticket every N minutes of run time.
+class _AutoDripControl extends StatelessWidget {
+  const _AutoDripControl();
+
+  @override
+  Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
+    final SettingsState s = context.watch<SettingsCubit>().state;
+    final SettingsCubit settings = context.read<SettingsCubit>();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        SwitchListTile(
+          key: const Key('autoDripToggle'),
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          value: s.autoDripEnabled,
+          onChanged: settings.setAutoDripEnabled,
+          title: const Text(
+            'Auto-add tickets',
+            style: TextStyle(fontWeight: FontWeight.w600, fontSize: kFontMd),
+          ),
+          subtitle: Text(
+            'A new order every ${s.autoDripMins} min of run time, while the '
+            'run is playing.',
+            style: TextStyle(color: c.textMuted, fontSize: kFontSm),
+          ),
+        ),
+        if (s.autoDripEnabled) ...<Widget>[
+          const SizedBox(height: kSpaceXs),
+          Text(
+            'Every',
+            style: TextStyle(color: c.textMuted, fontSize: kFontSm),
+          ),
+          const SizedBox(height: kSpaceXs),
+          Wrap(
+            spacing: kSpaceSm,
+            runSpacing: kSpaceSm,
+            children: <Widget>[
+              for (final int m in _kAutoDripMinutes)
+                _SettingChip(
+                  label: m == 1 ? '1 min' : '$m min',
+                  selected: s.autoDripMins == m,
+                  onTap: () => settings.setAutoDripMins(m),
+                ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }
@@ -625,8 +833,8 @@ class _DemoSummary extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: kSpaceSm,
+          runSpacing: kSpaceSm,
           children: <Widget>[
             _StatChip(label: 'Tickets', value: '${data.kots.length}'),
             _StatChip(label: 'Dishes', value: '${data.totalDishes}'),
@@ -709,9 +917,16 @@ class _KotTile extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Text(
-                'Table ${kot.table}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              Flexible(
+                child: Text(
+                  // Dine-in orders sit at a table; takeaway/delivery don't.
+                  kot.type == KotType.dineIn
+                      ? 'Table ${kot.table}'
+                      : 'Order ${kot.table}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
               ),
               const SizedBox(width: kSpaceSm),
               Container(
@@ -720,14 +935,18 @@ class _KotTile extends StatelessWidget {
                   vertical: kSpaceXs,
                 ),
                 decoration: BoxDecoration(
-                  color: KBuzzColors.brandSecondary,
+                  color: c.brand.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(kRadiusMd),
                 ),
+                // Brand-tinted fill with a muted-text label: a same-hue brand
+                // foreground fails contrast on the light theme's pale tint, so
+                // use textSecondary, which stays legible (>4.5:1) in both themes.
                 child: Text(
                   kot.type.label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: kFontXs,
-                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    color: c.textSecondary,
                   ),
                 ),
               ),
@@ -760,57 +979,40 @@ const List<_Sponsor> _kSponsors = <_Sponsor>[
 /// Testing aid: upload a saved KOT/receipt photo and run it through the **real**
 /// scan flow (Claude parse → review → add to the board, ad-hoc dishes and all).
 /// Opens the scan screen with the gallery picker already triggered — no camera
-/// needed, so it works on simulators/desktop. Needs a Claude key + demo data.
+/// needed, so it works on simulators/desktop. Needs a Claude key; demo data is
+/// optional (the scan can bootstrap a board on its own).
 class _ScanTestCard extends StatelessWidget {
   const _ScanTestCard();
 
   @override
   Widget build(BuildContext context) {
     final KdsColors c = KdsColors.of(context);
-    return Card(
-      color: c.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(kSpaceLg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Row(
-              children: <Widget>[
-                Icon(Icons.document_scanner_outlined, size: 18, color: c.brand),
-                const SizedBox(width: kSpaceSm),
-                const Text(
-                  'Scan a ticket image',
-                  style: TextStyle(
-                    fontSize: kFontLg,
-                    fontWeight: FontWeight.w700,
-                  ),
+    return _CollapsibleSection(
+      icon: Icons.document_scanner_outlined,
+      title: 'Scan a ticket image',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            'Drag & drop a saved KOT / receipt image onto a test page — for '
+            'desktop / macOS. Needs a Claude key (above); demo data is '
+            'optional — with none, it builds a board from the scan.',
+            style: TextStyle(color: c.textMuted, fontSize: kFontMd),
+          ),
+          const SizedBox(height: kSpaceMd),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: () => Navigator.of(context, rootNavigator: true).push(
+                MaterialPageRoute<void>(
+                  builder: (BuildContext _) => const ScanPage(dropMode: true),
                 ),
-              ],
-            ),
-            const SizedBox(height: kSpaceXs),
-            Text(
-              'Drag & drop a saved KOT / receipt image onto a test page — for '
-              'desktop / macOS. Needs a Claude key (above) and generated demo '
-              'data to match against.',
-              style: TextStyle(color: c.textMuted, fontSize: kFontMd),
-            ),
-            const SizedBox(height: kSpaceMd),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () =>
-                    Navigator.of(context, rootNavigator: true).push(
-                      MaterialPageRoute<void>(
-                        builder: (BuildContext _) =>
-                            const ScanPage(dropMode: true),
-                      ),
-                    ),
-                icon: const Icon(Icons.image_outlined),
-                label: const Text('Open drop-to-scan page'),
               ),
+              icon: const Icon(Icons.image_outlined),
+              label: const Text('Open drop-to-scan page'),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -872,6 +1074,8 @@ class _SponsorsCardState extends State<_SponsorsCard> {
   @override
   Widget build(BuildContext context) {
     final KdsColors c = KdsColors.of(context);
+    // Sponsors stay always-visible (not a collapsible section) so the banner is
+    // never hidden behind a dropdown.
     return Card(
       color: c.surface,
       child: Padding(

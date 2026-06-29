@@ -106,6 +106,56 @@ class Pill extends StatelessWidget {
   }
 }
 
+/// A surface card with a **ticket-colour left stripe** ([ticketColor]) — so an
+/// order is recognisable across boards, matching the Stations rail's per-ticket
+/// bar colour. The Tickets card and the Fire-next row both wrap their content in
+/// one. [border] is the optional status outline (kept uniform so the rounded
+/// corners stay valid); the stripe is drawn inside the rounded clip.
+class TicketStripeCard extends StatelessWidget {
+  const TicketStripeCard({
+    super.key,
+    required this.ticketColor,
+    required this.child,
+    this.border,
+    this.margin,
+    this.padding = const EdgeInsets.all(kSpaceMd),
+  });
+
+  final Color ticketColor;
+  final Widget child;
+  final BoxBorder? border;
+  final EdgeInsetsGeometry? margin;
+  final EdgeInsetsGeometry padding;
+
+  static const double _stripeWidth = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    final KdsColors c = KdsColors.of(context);
+    return Container(
+      margin: margin,
+      clipBehavior: Clip.antiAlias, // round the stripe's corners to the card
+      decoration: BoxDecoration(
+        color: c.surface,
+        borderRadius: BorderRadius.circular(kRadiusLg),
+        border: border,
+      ),
+      child: Stack(
+        children: <Widget>[
+          Padding(padding: padding, child: child),
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: _stripeWidth,
+            child: ColoredBox(color: ticketColor),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// One scheduled cook: emoji, name (+qty), optional station dot, cook time +
 /// slack (can-hold / plates-late / on-time), status badge, and (optionally) the
 /// tables it serves.

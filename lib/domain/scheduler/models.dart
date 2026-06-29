@@ -124,6 +124,25 @@ class ScheduledMember extends Equatable {
 /// rushed ticket. [none] is an ordinary cook.
 enum PriorityKind { none, rush, fireNow, recook }
 
+/// Stable identity for a cook, invariant under a reschedule's lane/uid churn:
+/// `stationId|dishId|sortedKotIds`. A deliberate re-fire (recook / fire-now)
+/// appends its monotonic [reFireSeq] so each re-fire is a distinct cook. Shared
+/// by the scheduler (to honour a pinned fire time) and the service layer (to
+/// capture fires / pin started cooks), so both sides agree on the key.
+String cookKey({
+  required String stationId,
+  required String dishId,
+  required List<String> kotIds,
+  PriorityKind priority = PriorityKind.none,
+  int reFireSeq = 0,
+}) {
+  final List<String> ids = List<String>.of(kotIds)..sort();
+  final String base = '$stationId|$dishId|${ids.join(',')}';
+  final bool isRefire =
+      priority == PriorityKind.recook || priority == PriorityKind.fireNow;
+  return isRefire ? '$base|refire:$reFireSeq' : base;
+}
+
 /// The scheduler's output for one cook: when to fire it, when it finishes, and
 /// how it relates to its target (held early vs plated late). Immutable.
 class ScheduledDish extends Equatable {
@@ -146,6 +165,7 @@ class ScheduledDish extends Equatable {
     required this.lane,
     this.priority = PriorityKind.none,
     this.recookReason,
+    this.reFireSeq = 0,
   });
 
   /// Stable index within the schedule's `dishes` list (used for UI selection).
@@ -188,6 +208,11 @@ class ScheduledDish extends Equatable {
   /// The recook reason when [priority] is [PriorityKind.recook].
   final String? recookReason;
 
+  /// Re-fire counter carried from the line ([OrderLine.reFireSeq]); 0 for a
+  /// first-time cook. Distinguishes successive re-fires of the same line so each
+  /// gets a distinct [fireKey] and re-announces, even within one board minute.
+  final int reFireSeq;
+
   /// Whether this cook serves more than one ticket.
   bool get isBatched => members.length > 1;
 
@@ -211,6 +236,7 @@ class ScheduledDish extends Equatable {
         lane,
         priority,
         recookReason,
+        reFireSeq,
       ];
 }
 

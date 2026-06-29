@@ -270,8 +270,127 @@ Result<DemoData> _validateDataset(
   }
 
   return Result<DemoData>.ok(
-    DemoData(stations: stations, menu: menu, kots: kots),
+    DemoData(stations: stations, menu: _coherentMenu(menu, stations), kots: kots),
   );
+}
+
+const Logger _coherenceLog = Logger('demo-data-ai');
+
+/// Station-name words that mean a no-heat line (garde-manger / cold / salads).
+const List<String> _coldStationWords = <String>[
+  'cold', 'salad', 'garde', 'pantry', 'raw', 'chilled',
+];
+
+/// Station-name words that mean the line applies heat.
+const List<String> _hotStationWords = <String>[
+  'grill', 'fry', 'fryer', 'saute', 'sauté', 'wok', 'oven', 'tandoor',
+  'range', 'stove', 'griddle', 'broil', 'smoke', 'bbq', 'barbe', 'char',
+  'plancha', 'pizza', 'hot',
+];
+
+/// Dish-name words that unambiguously imply a hot-cooked dish, mapped to the
+/// station-name words that best fit them (grilled→grill, fried→fryer, …). Used
+/// for BOTH detection (a dish whose name contains any key reads as hot) and
+/// destination choice. Kept high-precision on purpose — only verbs/items that
+/// are essentially always served hot — so the net never relocates borderline
+/// dishes.
+const Map<String, List<String>> _hotDishToStationWords = <String, List<String>>{
+  'grilled': <String>['grill', 'char'],
+  'seared': <String>['grill', 'plancha', 'range'],
+  'blackened': <String>['grill', 'char'],
+  'charred': <String>['grill', 'char'],
+  'sizzling': <String>['grill', 'wok'],
+  'fried': <String>['fry', 'fryer'],
+  'fries': <String>['fry', 'fryer'],
+  'wings': <String>['fry', 'fryer', 'grill'],
+  'bbq': <String>['bbq', 'smoke', 'grill'],
+  'barbecue': <String>['bbq', 'smoke', 'grill'],
+  'ribs': <String>['smoke', 'bbq', 'oven', 'grill'],
+  'braised': <String>['oven', 'range', 'stove'],
+  'broiled': <String>['broil', 'oven', 'grill'],
+  'burger': <String>['grill', 'griddle'],
+};
+
+/// Dish-name words that mark a dish as cold even if it carries a hot word
+/// (a "grilled chicken salad" is a legit garde-manger salad). These veto a move
+/// so we never relocate a real salad onto a hot line.
+const List<String> _coldDishWords = <String>[
+  'salad', 'slaw', 'ceviche', 'tartare', 'carpaccio', 'gazpacho',
+];
+
+bool _containsAny(String text, Iterable<String> words) {
+  final String lower = text.toLowerCase();
+  for (final String w in words) {
+    if (lower.contains(w)) return true;
+  }
+  return false;
+}
+
+/// Belt-and-suspenders behind the prompt coherence rule in [_systemPrompt]:
+/// move an unambiguously HOT dish off a COLD-named station onto a hot station.
+///
+/// Conservative by design — it acts only when the dish name clearly implies hot
+/// cooking AND is not itself a cold dish (salads are vetoed), and it only moves
+/// the dish when a hot station actually exists (otherwise it logs and leaves it,
+/// since relocating onto another cold/unknown line would be no better). Returns
+/// the menu with offending dishes repointed; everything else passes through
+/// unchanged. Kots are unaffected — they reference dishes by id, not station.
+List<Dish> _coherentMenu(List<Dish> menu, List<Station> stations) {
+  final Map<String, Station> byId = <String, Station>{
+    for (final Station s in stations) s.id: s,
+  };
+  final List<Station> hotStations = stations
+      .where((Station s) => _containsAny(s.name, _hotStationWords))
+      .toList(growable: false);
+
+  return menu.map((Dish d) {
+    final Station? station = byId[d.stationId];
+    final bool mismatch = station != null &&
+        _containsAny(station.name, _coldStationWords) &&
+        _containsAny(d.name, _hotDishToStationWords.keys) &&
+        !_containsAny(d.name, _coldDishWords);
+    if (!mismatch) return d;
+
+    final Station? target = _pickHotStation(d.name, hotStations);
+    if (target == null || target.id == d.stationId) {
+      if (target == null) {
+        _coherenceLog.warning(
+          'Station coherence: "${d.name}" reads as hot but sits on cold '
+          'station "${station.name}"; no hot station to move it to — kept.',
+        );
+      }
+      return d;
+    }
+    _coherenceLog.info(
+      'Station coherence: moved "${d.name}" off cold station '
+      '"${station.name}" onto "${target.name}".',
+    );
+    return Dish(
+      id: d.id,
+      name: d.name,
+      emoji: d.emoji,
+      stationId: target.id,
+      cookMins: d.cookMins,
+      holdable: d.holdable,
+      batchable: d.batchable,
+    );
+  }).toList();
+}
+
+/// Best hot station for a misplaced dish: prefer one whose name fits the dish's
+/// cooking verb (grilled→Grill, fried→Fryer), else the first hot station. Null
+/// when the menu has no hot station at all.
+Station? _pickHotStation(String dishName, List<Station> hotStations) {
+  if (hotStations.isEmpty) return null;
+  final String lower = dishName.toLowerCase();
+  for (final MapEntry<String, List<String>> e
+      in _hotDishToStationWords.entries) {
+    if (!lower.contains(e.key)) continue;
+    for (final Station s in hotStations) {
+      if (_containsAny(s.name, e.value)) return s;
+    }
+  }
+  return hotStations.first;
 }
 
 /// Decode a response body as UTF-8 from its raw bytes.
@@ -366,17 +485,22 @@ const String _systemPrompt =
     '"orderedMinsAgo": int, "lines": [{"dishId": str, "qty": int, '
     '"note": str (optional special instruction)}]}]\n'
     '}\n'
-    'Rules: 6-9 stations, each a distinct cooking line with a distinct hex colour '
+    'Rules: 4-6 stations, each a distinct cooking line with a distinct hex colour '
     'and capacity 1-3; 10-16 menu dishes spread across the stations with '
     'believable cook times (2-18 min), holdable/batchable flags and a fitting '
-    'emoji; 4-7 tickets, each with 1-4 line items and orderedMinsAgo 0-8. '
+    'emoji; 3-5 tickets, each with 1-3 line items and orderedMinsAgo 0-8. '
     'Weight each ticket "type" heavily toward dineIn: about 80% dineIn, ~10% '
     'delivery, ~10% takeaway — i.e. the large majority are dineIn, with only the '
     'occasional delivery or takeaway across the batch. Give roughly a third of the '
     'line items a short "note" — a realistic kitchen instruction like "no salt", '
     '"extra spicy", "well done", "allergy: nuts", "sauce on the side" (omit it '
-    'on the rest). Every menu dish stationId MUST match a station id; every line '
-    'dishId MUST match a menu id. Use short lowercase-slug ids.\n'
+    'on the rest). Every menu dish stationId MUST match a station id, and each '
+    'dish MUST sit on a station whose cooking method actually fits it — grilled '
+    'or seared items on a grill, fried items on a fry station, soups on a soup '
+    'station, and only genuinely cold or no-cook items (salads, slaws, raw/'
+    'chilled sides) on a cold/salad/garde-manger station. Never place a '
+    'hot-cooked dish on a cold/salad station, or a cold dish on a hot line. '
+    'Every line dishId MUST match a menu id. Use short lowercase-slug ids.\n'
     'CUISINE: The restaurant serves food popular in the United States. Pick a '
     'different mainstream American style each generation — e.g. classic American '
     'diner, burger & grill, BBQ smokehouse, Tex-Mex, Southern comfort, '

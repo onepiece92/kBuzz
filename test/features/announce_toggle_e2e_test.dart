@@ -20,11 +20,16 @@ class _RecordingAnnouncer implements Announcer {
   final List<String> spoken = <String>[];
   int chimes = 0;
 
+  int stops = 0;
+
   @override
   Future<void> announce(String text) async => spoken.add(text);
 
   @override
   Future<void> chime() async => chimes++;
+
+  @override
+  Future<void> stop() async => stops++;
 }
 
 /// A real [FireAlertCubit] with a hook to push a fire on demand (mirrors the
@@ -107,6 +112,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // Settings starts collapsed now — open it so its controls (the "Read fires
+    // aloud" switch) are built and findable.
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
     return (settings: settings, fire: fire, announcer: announcer);
   }
 
@@ -139,18 +148,24 @@ void main() {
     expect(announcer.spoken, hasLength(1));
     expect(announcer.spoken.single, contains('Burger'));
 
-    // Mute via the real Profile switch.
+    // Mute via the real Profile switch. The toggle is now a full-width
+    // SwitchListTile whose centre sits under the fire toast — tap its inner
+    // Switch (right edge), which is clear of the overlay.
     await tester.ensureVisible(find.text('Read fires aloud'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('announceToggle')));
+    await tester.tap(find.descendant(
+      of: find.byKey(const Key('announceToggle')),
+      matching: find.byType(Switch),
+    ));
     await tester.pump();
     expect(settings.state.announceEnabled, isFalse);
 
-    // A second fire still raises the toast, but nothing new is spoken.
+    // A second fire still raises a toast (now its own stacked toast), but
+    // nothing new is spoken.
     driveOneFire(fire);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.text('FIRE NOW'), findsOneWidget);
+    expect(find.text('FIRE NOW'), findsWidgets); // two stacked now
     expect(announcer.spoken, hasLength(1)); // unchanged → muted
 
     // Drain the fire toast's auto-dismiss timer so none outlives the test.

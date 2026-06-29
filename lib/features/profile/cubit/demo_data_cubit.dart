@@ -56,15 +56,41 @@ class DemoDataCubit extends Cubit<DemoDataState> {
 
   /// Restore any persisted data on startup (no-op if generate() already ran or
   /// the store is empty).
+  /// True once a non-empty board was restored from the store on startup — the
+  /// shell uses this to auto-resume the run (only on a restart, never on a fresh
+  /// generate).
+  bool get restoredFromStore => _restoredFromStore;
+  bool _restoredFromStore = false;
+
   Future<void> _hydrate(KitchenRepository repo) async {
     try {
       final DemoData data = await repo.loadSnapshot();
       if (state.hasData) return;
       if (data.stations.isEmpty && data.kots.isEmpty) return;
-      emit(DemoDataState(data: data, generatedAt: _clock.now()));
+      // Resume the ORIGINAL board epoch (so the run continues at true wall time),
+      // not _clock.now(). Fallbacks: a v3 DB upgraded in place has orders but no
+      // persisted epoch yet → anchor to the earliest order; neither → now.
+      _restoredFromStore = true;
+      emit(DemoDataState(
+        data: data,
+        generatedAt:
+            data.generatedAt ?? _earliestOrderedAt(data) ?? _clock.now(),
+      ));
     } on Object catch (e, st) {
       _log.error('hydrate failed', error: e, stackTrace: st);
     }
+  }
+
+  /// Earliest order time across the board, or null when there are no tickets —
+  /// the back-compat epoch fallback for a pre-v4 DB with no persisted epoch.
+  static DateTime? _earliestOrderedAt(DemoData data) {
+    DateTime? earliest;
+    for (final Kot k in data.kots) {
+      if (earliest == null || k.orderedAt.isBefore(earliest)) {
+        earliest = k.orderedAt;
+      }
+    }
+    return earliest;
   }
 
   /// Generate (or regenerate) a fresh demo dataset.
@@ -103,7 +129,10 @@ class DemoDataCubit extends Cubit<DemoDataState> {
   void _emitData(DemoData data, {required DateTime now, String? error}) {
     final DemoData withIds = _ensureLineIds(data);
     emit(DemoDataState(data: withIds, generatedAt: now, error: error));
-    _persist((KitchenRepository repo) => repo.replaceAll(withIds));
+    // Persist the epoch atomically with the snapshot so a restart resumes this
+    // board's real timeline. Speed is owned/persisted by the run clock.
+    _persist((KitchenRepository repo) =>
+        repo.replaceAll(withIds.copyWith(generatedAt: now)));
   }
 
   /// Bootstrap a board from a scanned ticket when there's no demo data yet — the
@@ -124,8 +153,47 @@ class DemoDataCubit extends Cubit<DemoDataState> {
 
   /// Drop the demo data back to empty (config + tickets).
   void clear() {
+    _runSnapshot = null;
     emit(const DemoDataState());
     _persist((KitchenRepository repo) => repo.clearAll());
+  }
+
+  /// The board as it was when the run started — so [clearForFreshStart] (the
+  /// Reset button) can recover the start-of-service station capacities.
+  /// In-memory: a fresh run re-snapshots.
+  DemoData? _runSnapshot;
+
+  /// Capture the current board as the run's start state. Called when the service
+  /// clock starts (manual *Start service* or the cold-start auto-resume).
+  void snapshotForRun() {
+    final DemoData? d = state.data;
+    if (d == null) return;
+    _runSnapshot = d.copyWith(generatedAt: state.generatedAt);
+  }
+
+  /// Reset = fresh start on the **same restaurant**: keep the stations and menu
+  /// but drop every ticket and reset each station's capacity to its
+  /// start-of-service value (undoing mid-run capacity bumps), then stamp a fresh
+  /// board epoch so the next *Start* runs from zero. Falls back to [clear] when
+  /// no run was ever started (no snapshot to take the defaults from).
+  void clearForFreshStart() {
+    final DemoData? snap = _runSnapshot;
+    if (snap == null) {
+      clear();
+      return;
+    }
+    final DateTime now = _clock.now();
+    // Same restaurant (start-of-service stations + menu), empty queue, fresh
+    // epoch. Stations come from the snapshot so capacities revert to default.
+    final DemoData fresh = DemoData(
+      stations: snap.stations,
+      menu: snap.menu,
+      kots: const <Kot>[],
+      generatedAt: now,
+    );
+    _runSnapshot = null; // the next Start re-snapshots this fresh board
+    emit(DemoDataState(data: fresh, generatedAt: now));
+    _persist((KitchenRepository repo) => repo.replaceAll(fresh));
   }
 
   /// Append a scanned/created ticket to the board.
@@ -153,6 +221,54 @@ class DemoDataCubit extends Cubit<DemoDataState> {
     );
     _persist((KitchenRepository repo) =>
         repo.addKot(withIds, newDishes: newDishes));
+  }
+
+  /// Inject **one** randomly-generated ticket "right now" — simulates real-world
+  /// orders trickling in while the service runs. The ticket is ordered at the
+  /// current service moment (board epoch + [elapsed], the live run time from the
+  /// service clock) so it lands at the now-line and schedules forward, exactly
+  /// like a KOT that just arrived. Keeps the board epoch fixed and writes through
+  /// to Drift.
+  ///
+  /// Only orders dishes from stations **already on the board** so the drip never
+  /// opens a new station mid-run — the station set stays stable for a clean test
+  /// environment. Falls back to the full menu if the board has no dishes yet.
+  ///
+  /// Returns the added ticket, or null when there's no board yet / the menu is
+  /// empty (nothing to order). Tests pass a seeded [Random] for determinism.
+  Kot? addRandomKot({Duration elapsed = Duration.zero}) {
+    final DemoData? current = state.data;
+    if (current == null || current.menu.isEmpty) return null;
+    final DateTime orderedAt = (state.generatedAt ?? _clock.now()).add(elapsed);
+    // Restrict to dishes whose station is already open on the board.
+    final Set<String> openStations = _openStationIds(current);
+    final List<Dish> onBoard = openStations.isEmpty
+        ? current.menu
+        : current.menu
+            .where((Dish d) => openStations.contains(d.stationId))
+            .toList();
+    final Kot kot = buildRandomKot(
+      now: orderedAt,
+      menu: onBoard.isEmpty ? current.menu : onBoard,
+      id: const Uuid().v4(),
+      random: _random,
+    );
+    addKot(kot);
+    return kot;
+  }
+
+  /// The set of station ids that currently have at least one dish on the board
+  /// (any ticket line) — i.e. the stations already "open". Used to keep the
+  /// auto-drip within the existing station set.
+  static Set<String> _openStationIds(DemoData data) {
+    final Map<String, String> stationOfDish = <String, String>{
+      for (final Dish d in data.menu) d.id: d.stationId,
+    };
+    return <String>{
+      for (final Kot k in data.kots)
+        for (final OrderLine l in k.lines)
+          if (stationOfDish[l.dishId] != null) stationOfDish[l.dishId]!,
+    };
   }
 
   /// Set a station's concurrent [capacity] and reschedule.
@@ -220,6 +336,7 @@ class DemoDataCubit extends Cubit<DemoDataState> {
         recook: l.recook + 1,
         reAt: reAtMins,
         reason: reason,
+        reFireSeq: l.reFireSeq + 1, // distinct cook so a repeat re-fire re-alerts
       ),
       reopenTicket: true,
     );
@@ -230,8 +347,12 @@ class DemoDataCubit extends Cubit<DemoDataState> {
   void fireNowLine(String lineId, {required int reAtMins}) {
     _updateLine(
       lineId,
-      (OrderLine l) =>
-          l.copyWith(state: LineState.open, reAt: reAtMins, clearReason: true),
+      (OrderLine l) => l.copyWith(
+        state: LineState.open,
+        reAt: reAtMins,
+        clearReason: true,
+        reFireSeq: l.reFireSeq + 1, // distinct cook so a repeat re-fire re-alerts
+      ),
     );
     _persist((KitchenRepository r) => r.fireNowLine(lineId, reAtMins: reAtMins));
   }
